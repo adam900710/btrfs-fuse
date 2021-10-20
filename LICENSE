@@ -1,3 +1,11 @@
+The following files are used under their own license, mostly GPLv2+ or GPLv2
+only:
+
+	libs/*.[ch]
+
+
+All other files is used under the terms of MIT license.
+
 Copyright 2021 Qu Wenruo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of

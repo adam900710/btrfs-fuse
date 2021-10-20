@@ -6,6 +6,7 @@
 #include <byteswap.h>
 #include <string.h>
 #include "ondisk_format.h"
+#include "libs/rbtree.h"
 
 /*
  * Various helpers to access the on-disk tree blocks
@@ -49,6 +50,7 @@ struct extent_buffer {
 	u32 flags;
 	struct btrfs_fs_info *fs_info;
 	int refs;
+	struct rb_node node;
 	char data[];
 };
 
