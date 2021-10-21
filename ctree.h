@@ -7,6 +7,8 @@
 #include "libs/rbtree.h"
 #include "libs/list.h"
 
+#define BTRFS_UUID_UNPARSED_SIZE 37
+
 struct btrfs_root {
 	struct extent_buffer *node;
 	struct btrfs_root_item root_item;
