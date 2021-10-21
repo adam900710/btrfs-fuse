@@ -487,4 +487,6 @@ static inline unsigned long btrfs_leaf_data(struct extent_buffer *l)
 	return offsetof(struct btrfs_leaf, items);
 }
 
+u16 btrfs_super_csum_size(const struct btrfs_super_block *sb);
+size_t btrfs_super_num_csums(void);
 #endif
