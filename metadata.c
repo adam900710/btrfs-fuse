@@ -263,3 +263,135 @@ error:
 	btrfs_release_path(path);
 	return ret;
 }
+
+/*
+ * Go to next sibling leaf
+ *
+ * Return 0 if next sibling leaf found and update @path.
+ * Return >0 if no more sibling leaf.
+ * Return <0 for error.
+ */
+static int next_leaf(struct btrfs_path *path)
+{
+	int slot;
+	int level;
+
+	for (level = 1; level < BTRFS_MAX_LEVEL; level++) {
+		/* No more parent */
+		if (!path->nodes[level])
+			return 1;
+
+		slot = path->slots[level] + 1;
+		/* Parent has next slot, continue to next step */
+		if (slot < btrfs_header_nritems(path->nodes[level])) {
+			path->slots[level] = slot;
+			break;
+		}
+		/* Parent has no next slot, continue to higher level */
+	}
+	if (level >= BTRFS_MAX_LEVEL)
+		return 1;
+
+	/* Now we're at @slot of @level, go to the left most path */
+	for (; level; level--) {
+		struct extent_buffer *eb;
+
+		slot = path->slots[level];
+		eb = read_node_child(path->nodes[level], slot);
+		if (IS_ERR(eb)) {
+			btrfs_release_path(path);
+			return PTR_ERR(eb);
+		}
+		free_extent_buffer(path->nodes[level - 1]);
+		path->nodes[level - 1] = eb;
+		path->slots[level - 1] = 0;
+	}
+	return 0;
+}
+
+int btrfs_search_key(struct btrfs_root *root, struct btrfs_path *path,
+		     struct btrfs_key *key)
+{
+	int ret;
+
+	ret = __search_slot(root, path, key);
+	if (ret > 0)
+		ret = -ENOENT;
+	if (ret < 0)
+		btrfs_release_path(path);
+	return ret;
+}
+
+static int key_in_range(struct btrfs_key *key,
+			struct btrfs_key_range *range)
+{
+	struct btrfs_key range_key1;
+	struct btrfs_key range_key2;
+
+	range_key1.objectid = range->objectid;
+	range_key1.type = range->type_start;
+	range_key1.offset = range->offset_start;
+
+	range_key2.objectid = range->objectid;
+	range_key2.type = range->type_end;
+	range_key2.offset = range->offset_end;
+
+	return (btrfs_comp_cpu_keys(&range_key1, key) <= 0 &&
+		btrfs_comp_cpu_keys(key, &range_key2) <= 0);
+}
+
+int btrfs_search_keys_start(struct btrfs_root *root, struct btrfs_path *path,
+			    struct btrfs_key_range *range)
+{
+	struct btrfs_key key;
+	int ret;
+
+	key.objectid = range->objectid;
+	key.type = range->type_start;
+	key.offset = range->offset_start;
+
+	ret = __search_slot(root, path, &key);
+	/* Either found or error */
+	if (ret <= 0)
+		return ret;
+
+	/* Check if current slot is used first */
+	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
+		ret = next_leaf(path);
+		if (ret > 0)
+			ret = -ENOENT;
+		if (ret < 0) {
+			btrfs_release_path(path);
+			return ret;
+		}
+	}
+
+	/* Check if the found key is in the target range */
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+	if (!key_in_range(&key, range)) {
+		btrfs_release_path(path);
+		return -ENOENT;
+	}
+	return 0;
+}
+
+int btrfs_search_keys_next(struct btrfs_path *path,
+			   struct btrfs_key_range *range)
+{
+	struct btrfs_key key;
+	int ret;
+
+	ASSERT(path->nodes[0]);
+
+	path->slots[0]++;
+	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
+		ret = next_leaf(path);
+		if (ret)
+			return ret;
+	}
+
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+	if (key_in_range(&key, range))
+		return 0;
+	return 1;
+}

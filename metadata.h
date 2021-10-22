@@ -10,6 +10,20 @@ struct btrfs_path {
 	int slots[BTRFS_MAX_LEVEL];
 };
 
+/* Specify a key range to search */
+struct btrfs_key_range {
+	/* The search range must have the same objectid */
+	u64 objectid;
+
+	/* Result slots will have @type_start <= key.type <= @type_end */
+	u8 type_start;
+	u8 type_end;
+
+	/* Result slots will have @offset_start <= key.offset <= @offset_end */
+	u64 offset_start;
+	u64 offset_end;
+};
+
 void btrfs_init_path(struct btrfs_path *path);
 void btrfs_release_path(struct btrfs_path *path);
 static inline int btrfs_comp_cpu_keys(const struct btrfs_key *key1,
@@ -53,5 +67,38 @@ void free_extent_buffer(struct extent_buffer *eb);
 struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 					    u64 logical, u8 level, u64 transid,
 					    struct btrfs_key *first_key);
+
+/*
+ * Search a single key to find an exact match
+ *
+ * Return 0 if an exact match is found and @path will point to the slot.
+ * Return -ENOENT if no exact is found.
+ * Return <0 for error.
+ */
+int btrfs_search_key(struct btrfs_root *root, struct btrfs_path *path,
+		     struct btrfs_key *key);
+
+/*
+ * Initial a search for a range of keys
+ *
+ * Return 0 if we found any key matching the range, and @path will point
+ * to the slot.
+ * Caller then need to call btrfs_search_keys_next() to continue.
+ *
+ * Return -ENOENT if we can't find any key matching the range
+ * Return <0 for error.
+ */
+int btrfs_search_keys_start(struct btrfs_root *root, struct btrfs_path *path,
+			    struct btrfs_key_range *range);
+
+/*
+ * Continue the search for a range of keys
+ *
+ * Return 0 if there is still a key matching the range, and update @path.
+ * Return >0 if there is no more such key, @path will still be updated
+ * return <0 for error, and @path will be released.
+ */
+int btrfs_search_keys_next(struct btrfs_path *path,
+			   struct btrfs_key_range *range);
 
 #endif
