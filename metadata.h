@@ -5,6 +5,13 @@
 
 #include "ctree.h"
 
+struct btrfs_path {
+	struct extent_buffer *nodes[BTRFS_MAX_LEVEL];
+	int slots[BTRFS_MAX_LEVEL];
+};
+
+void btrfs_init_path(struct btrfs_path *path);
+void btrfs_release_path(struct btrfs_path *path);
 static inline int btrfs_comp_cpu_keys(const struct btrfs_key *key1,
 				      const struct btrfs_key *key2)
 {
@@ -21,6 +28,12 @@ static inline int btrfs_comp_cpu_keys(const struct btrfs_key *key1,
 	if (key1->offset < key2->offset)
 		return -1;
 	return 0;
+}
+
+static inline struct extent_buffer *extent_buffer_get(struct extent_buffer *eb)
+{
+	eb->refs++;
+	return eb;
 }
 
 void free_extent_buffer(struct extent_buffer *eb);
