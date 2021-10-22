@@ -49,6 +49,9 @@ struct btrfs_fs_info {
 	/* Records logical->physical mappings */
 	struct rb_root mapping_root;
 
+	/* Recrods all extent_buffers */
+	struct rb_root eb_root;
+
 	/* Cached generation, the same as superblock::generation */
 	u64 generation;
 
