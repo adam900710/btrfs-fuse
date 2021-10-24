@@ -119,3 +119,41 @@ out:
 	close(fd);
 	return ret;
 }
+
+struct btrfs_fs_devices *btrfs_open_devices(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_fs_devices *fs_dev;
+	struct btrfs_fs_devices *found_fs_dev = NULL;
+	struct btrfs_device *device;
+	u8 *fsid = fs_info->fsid;
+
+	list_for_each_entry(fs_dev, &global_fs_list, fs_list) {
+		if (!memcmp(fsid, fs_dev->fsid, BTRFS_UUID_SIZE)) {
+			found_fs_dev = fs_dev;
+			break;
+		}
+	}
+	if (!found_fs_dev)
+		return ERR_PTR(-ENOENT);
+
+	list_for_each_entry(device, &found_fs_dev->dev_list, list) {
+		/* Already opened */
+		if (device->fd >= 0) {
+			ASSERT(device->fs_info);
+			continue;
+		}
+
+		device->fs_info = fs_info;
+
+		/* We allow missing devices (aka, degraded by default) */
+		if (!device->path) {
+			warning("devid %llu missing", device->devid);
+			continue;
+		}
+		device->fd = open(device->path, O_RDONLY);
+		if (device->fd < 0)
+			warning("failed to open devid %llu path %s", device->devid,
+				device->path);
+	}
+	return found_fs_dev;
+}

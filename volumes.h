@@ -49,4 +49,12 @@ struct btrfs_fs_devices {
  */
 int btrfs_scan_device(const char *path, struct btrfs_super_block *sb);
 
+/*
+ * Open all devices belonging to the fs with @fsid
+ *
+ * At this stage, @fs_info should be pretty empty with just superblock and
+ * fsid populated.
+ */
+struct btrfs_fs_devices *btrfs_open_devices(struct btrfs_fs_info *fs_info);
+
 #endif
