@@ -22,17 +22,6 @@ struct btrfs_root {
 	int refs;
 };
 
-struct btrfs_device {
-	struct list_head list;
-	struct btrfs_fs_info *fs_info;
-
-	u64 type;
-	u64 devid;
-	u8 uuid[BTRFS_UUID_SIZE];
-
-	int fd;
-};
-
 /* Represents a btrfs filesystem */
 struct btrfs_fs_info {
 	u8 chunk_tree_uuid[BTRFS_UUID_SIZE];

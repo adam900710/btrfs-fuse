@@ -7,6 +7,7 @@
 #include "disk-io.h"
 #include "messages.h"
 #include "hash.h"
+#include "volumes.h"
 
 int btrfs_read_from_disk(int fd, char *buf, u64 offset, u32 len)
 {

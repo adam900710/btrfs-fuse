@@ -4,6 +4,7 @@
 #define BTRFS_FUSE_DISK_IO_H
 
 #include "ctree.h"
+#include "volumes.h"
 
 /*
  * Read directly from physical @offset from disk.
