@@ -157,3 +157,108 @@ struct btrfs_fs_devices *btrfs_open_devices(struct btrfs_fs_info *fs_info)
 	}
 	return found_fs_dev;
 }
+
+/* Find a device which belongs to the fs specified by @fs_info */
+struct btrfs_device *btrfs_find_device(struct btrfs_fs_info *fs_info, u64 devid,
+				       const u8 *dev_uuid)
+{
+	struct btrfs_fs_devices *fs_devs = fs_info->fs_devices;
+	struct btrfs_device *device;
+	struct btrfs_device *found_dev = NULL;
+
+	ASSERT(fs_devs);
+	list_for_each_entry(device, &fs_devs->dev_list, list) {
+		if (device->devid == devid &&
+		    !memcmp(dev_uuid, device->uuid, BTRFS_UUID_SIZE)) {
+			found_dev = device;
+			break;
+		}
+	}
+	return found_dev;
+}
+
+static inline int btrfs_chunk_item_size(int num_stripes)
+{
+	return sizeof(struct btrfs_chunk) +
+		num_stripes * sizeof(struct btrfs_stripe);
+}
+
+/*
+ * Add a chunk map to @fs_info.
+ *
+ * @logical:	 Logical bytenr of the chunk
+ * @stack_chunk: The chunk item
+ * @size_max:	 The maximum chunk size, this is to co-operate with superblock
+ * 		 sys_chunk_array which doesn't have item_size to show its size
+ */
+static int add_chunk_map(struct btrfs_fs_info *fs_info, u64 logical,
+			 struct btrfs_chunk *stack_chunk, int max_size)
+{
+	struct rb_node **p = &fs_info->mapping_root.rb_node;
+	struct rb_node *parent = NULL;
+	struct btrfs_chunk_map *map;
+	u64 length = btrfs_stack_chunk_length(stack_chunk);
+	int num_stripes;
+	int i;
+
+	/* Sanity check to ensure we don't go beyond @max_size */
+	if (btrfs_chunk_item_size(1) > max_size) {
+		error("invalid chunk size, expected max %u has minimal %u",
+			max_size, btrfs_chunk_item_size(1));
+		return -EUCLEAN;
+	}
+	num_stripes = btrfs_stack_chunk_num_stripes(stack_chunk);
+	if (btrfs_chunk_item_size(num_stripes) > max_size) {
+		error("invalid chunk size, expected max %u has minimal %u",
+			max_size, btrfs_chunk_item_size(num_stripes));
+		return -EUCLEAN;
+	}
+	while (*p) {
+		parent = *p;
+		map = rb_entry(parent, struct btrfs_chunk_map, node);
+
+		if (logical < map->logical)
+			p = &(*p)->rb_left;
+		else if (logical > map->logical)
+			p = &(*p)->rb_right;
+		else if (logical == map->logical && length == map->length &&
+			 num_stripes == map->num_stripes)
+			return 0;
+		else
+			return -EEXIST;
+	}
+
+	map = calloc(1, btrfs_chunk_map_size(num_stripes));
+	if (!map)
+		return -ENOMEM;
+	map->length = length;
+	map->logical = logical;
+	map->flags = btrfs_stack_chunk_type(stack_chunk);
+	map->num_stripes = num_stripes;
+
+	for (i = 0; i < num_stripes; i++) {
+		struct btrfs_device *dev;
+		u64 devid = btrfs_stack_stripe_devid(&stack_chunk->stripes[i]);
+
+		dev = btrfs_find_device(fs_info, devid,
+					stack_chunk->stripes[i].dev_uuid);
+		if (!dev) {
+			warning("devid %llu is missing", devid);
+			dev = global_add_device(NULL, fs_info->fsid,
+					stack_chunk->stripes[i].dev_uuid, devid);
+			if (IS_ERR(dev)) {
+				free(map);
+				return PTR_ERR(dev);
+			}
+			dev = btrfs_find_device(fs_info, devid,
+					stack_chunk->stripes[i].dev_uuid);
+			ASSERT(dev);
+		}
+		map->stripes[i].dev = dev;
+		map->stripes[i].physical =
+			btrfs_stack_stripe_offset(&stack_chunk->stripes[i]);
+	}
+	rb_link_node(&map->node, parent, p);
+	rb_insert_color(&map->node, &fs_info->mapping_root);
+	return 0;
+}

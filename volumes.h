@@ -5,6 +5,7 @@
 
 #include <btrfs/kerncompat.h>
 #include "libs/list.h"
+#include "libs/rbtree.h"
 #include "ondisk_format.h"
 
 /*
@@ -41,6 +42,27 @@ struct btrfs_fs_devices {
 
 };
 
+struct btrfs_io_stripe {
+	struct btrfs_device *dev;
+	u64 physical;
+};
+
+struct btrfs_chunk_map {
+	struct rb_node node;
+
+	u64 logical;
+	u64 length;
+	u64 flags;
+
+	int num_stripes;
+	struct btrfs_io_stripe stripes[];
+};
+
+static int inline btrfs_chunk_map_size(int num_stripes)
+{
+	return sizeof(struct btrfs_chunk_map) +
+		num_stripes * sizeof(struct btrfs_io_stripe);
+}
 /*
  * Try to scan one device for btrfs.
  *
