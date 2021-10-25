@@ -7,6 +7,7 @@
 #include "volumes.h"
 #include "disk-io.h"
 #include "messages.h"
+#include "metadata.h"
 
 static LIST_HEAD(global_fs_list);
 
@@ -261,4 +262,148 @@ static int add_chunk_map(struct btrfs_fs_info *fs_info, u64 logical,
 	rb_link_node(&map->node, parent, p);
 	rb_insert_color(&map->node, &fs_info->mapping_root);
 	return 0;
+}
+
+int btrfs_read_sys_chunk_array(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_super_block *sb = &fs_info->super_copy;
+	u32 sys_chunk_size = btrfs_super_sys_array_size(sb);
+	int cur = 0;
+
+	while (cur < sys_chunk_size) {
+		struct btrfs_disk_key *disk_key;
+		struct btrfs_chunk *chunk;
+		u16 num_stripes;
+		int ret;
+		/*
+		 * Make sure we have enough space to contain one disk_key +
+		 * one chunk.
+		 */
+		if (sys_chunk_size - cur < sizeof(struct btrfs_disk_key) +
+		    btrfs_chunk_item_size(1)) {
+			error(
+		"invalid sys_chunk_size, has %u bytes left expected minimal %lu",
+				sys_chunk_size - cur,
+				sizeof(struct btrfs_disk_key) +
+				btrfs_chunk_item_size(1));
+			return -EUCLEAN;
+		}
+		disk_key = (struct btrfs_disk_key *)(sb->sys_chunk_array + cur);
+		if (btrfs_disk_key_objectid(disk_key) !=
+		    BTRFS_FIRST_CHUNK_TREE_OBJECTID ||
+		    btrfs_disk_key_type(disk_key) != BTRFS_CHUNK_ITEM_KEY) {
+			error("invalid disk key found, (%llu %u %llu)",
+				btrfs_disk_key_objectid(disk_key),
+				btrfs_disk_key_type(disk_key),
+				btrfs_disk_key_offset(disk_key));
+			return -EUCLEAN;
+		}
+		chunk = (struct btrfs_chunk *)(disk_key + 1);
+		num_stripes = btrfs_stack_chunk_num_stripes(chunk);
+
+		ret = add_chunk_map(fs_info, btrfs_disk_key_offset(disk_key),
+				chunk, sys_chunk_size - sizeof(*disk_key) - cur);
+		if (ret < 0) {
+			error("failed to add chunk %llu: %d",
+				btrfs_disk_key_offset(disk_key), ret);
+			return ret;
+		}
+		cur += btrfs_chunk_item_size(num_stripes) + sizeof(*disk_key);
+	}
+	return 0;
+}
+
+static int read_one_dev(struct btrfs_fs_info *fs_info, struct btrfs_path *path)
+{
+	struct btrfs_dev_item *di;
+	struct btrfs_device *device;
+	u8 fsid[BTRFS_UUID_SIZE];
+	u8 dev_uuid[BTRFS_UUID_SIZE];
+	u64 devid;
+
+	di = btrfs_item_ptr(path->nodes[0], path->slots[0], struct btrfs_dev_item);
+	devid = btrfs_device_id(path->nodes[0], di);
+
+	read_extent_buffer(path->nodes[0], dev_uuid,
+			(unsigned long)btrfs_device_uuid(di), BTRFS_UUID_SIZE);
+	read_extent_buffer(path->nodes[0], fsid,
+			(unsigned long)btrfs_device_fsid(di), BTRFS_UUID_SIZE);
+	device = btrfs_find_device(fs_info, devid, dev_uuid);
+	if (!device) {
+		warning("devid %llu is missing", devid);
+		device = global_add_device(NULL, fsid, dev_uuid, devid);
+		if (IS_ERR(device))
+			return PTR_ERR(device);
+	}
+	return 0;
+}
+
+int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_path path = {} ;
+	struct btrfs_key_range range;
+	int ret = 0;
+
+	range.objectid = BTRFS_DEV_ITEMS_OBJECTID;
+	range.type_start = range.type_end = BTRFS_DEV_ITEM_KEY;
+	range.offset_start = 0;
+	range.offset_end = (u64)-1;
+	ret = btrfs_search_keys_start(fs_info->chunk_root, &path, &range);
+	if (ret < 0) {
+		error("failed to read dev items: %d", ret);
+		return ret;
+	}
+
+	/* Read all device items */
+	while (true) {
+		ret = read_one_dev(fs_info, &path);
+		if (ret < 0)
+			goto out;
+
+		ret = btrfs_search_keys_next(&path, &range);
+		if (ret < 0)
+			goto out;
+		if (ret > 0) {
+			ret = 0;
+			break;
+		}
+	}
+
+	btrfs_release_path(&path);
+	range.objectid = BTRFS_FIRST_CHUNK_TREE_OBJECTID;
+	range.type_start = range.type_end = BTRFS_CHUNK_ITEM_KEY;
+	range.offset_start = 0;
+	range.offset_end = (u64)-1;
+	ret = btrfs_search_keys_start(fs_info->chunk_root, &path, &range);
+	if (ret < 0) {
+		error("failed to read chunk items: %d", ret);
+		return ret;
+	}
+
+	/* Read all chunk items */
+	while (true) {
+		struct btrfs_key key;
+		struct btrfs_chunk *chunk;
+
+		btrfs_item_key_to_cpu(path.nodes[0], &key, path.slots[0]);
+		chunk = (struct btrfs_chunk *)(path.nodes[0]->data +
+			btrfs_item_ptr_offset(path.nodes[0], path.slots[0]));
+
+		ret = add_chunk_map(fs_info, key.offset, chunk,
+			btrfs_item_size_nr(path.nodes[0], path.slots[0]));
+		if (ret < 0)
+			goto out;
+
+		ret = btrfs_search_keys_next(&path, &range);
+		if (ret < 0)
+			goto out;
+		if (ret > 0) {
+			ret = 0;
+			break;
+		}
+	}
+
+out:
+	btrfs_release_path(&path);
+	return ret;
 }

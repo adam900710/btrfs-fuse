@@ -79,4 +79,7 @@ int btrfs_scan_device(const char *path, struct btrfs_super_block *sb);
  */
 struct btrfs_fs_devices *btrfs_open_devices(struct btrfs_fs_info *fs_info);
 
+int btrfs_read_sys_chunk_array(struct btrfs_fs_info *fs_info);
+int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info);
+
 #endif
