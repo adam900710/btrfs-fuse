@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <uuid.h>
 #include "ondisk_format.h"
-#include "disk-io.h"
+#include "super.h"
 #include "messages.h"
 #include "hash.h"
 #include "volumes.h"

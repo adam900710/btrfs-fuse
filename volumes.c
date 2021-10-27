@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <linux/limits.h>
 #include "volumes.h"
-#include "disk-io.h"
+#include "super.h"
 #include "messages.h"
 #include "metadata.h"
 

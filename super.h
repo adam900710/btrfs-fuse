@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef BTRFS_FUSE_DISK_IO_H
-#define BTRFS_FUSE_DISK_IO_H
+#ifndef BTRFS_FUSE_SUPER_H
+#define BTRFS_FUSE_SUPER_H
 
 #include "ctree.h"
 #include "volumes.h"
