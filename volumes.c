@@ -9,7 +9,57 @@
 #include "messages.h"
 #include "metadata.h"
 
-const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES];
+/*
+ * This is for SINGLE/DUP/RAID1C*, which is purely mirror based.
+ *
+ * No stripe split is needed.
+ */
+static int mirrored_read(struct btrfs_fs_info *fs_info,
+			 struct btrfs_chunk_map *map, char *buf, size_t size,
+			 u64 logical, int mirror_num);
+
+/* Place holder for unsupported profiles */
+static int unsupported_read(struct btrfs_fs_info *fs_info,
+			    struct btrfs_chunk_map *map, char *buf, size_t size,
+			    u64 logical, int mirror_num);
+const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
+	[BTRFS_RAID_SINGLE] = {
+		.max_mirror = 1,
+		.read_func = mirrored_read,
+	},
+	[BTRFS_RAID_RAID0] = {
+		.max_mirror = 1,
+		.read_func = unsupported_read,
+	},
+	[BTRFS_RAID_RAID1] = {
+		.max_mirror = 2,
+		.read_func = mirrored_read,
+	},
+	[BTRFS_RAID_DUP] = {
+		.max_mirror = 2,
+		.read_func = mirrored_read,
+	},
+	[BTRFS_RAID_RAID10] = {
+		.max_mirror = 2,
+		.read_func = unsupported_read,
+	},
+	[BTRFS_RAID_RAID5] = {
+		.max_mirror = 2,
+		.read_func = unsupported_read,
+	},
+	[BTRFS_RAID_RAID6] = {
+		.max_mirror = 3,
+		.read_func = unsupported_read,
+	},
+	[BTRFS_RAID_RAID1C3] = {
+		.max_mirror = 3,
+		.read_func = mirrored_read,
+	},
+	[BTRFS_RAID_RAID1C4] = {
+		.max_mirror = 4,
+		.read_func = mirrored_read,
+	},
+};
 
 static LIST_HEAD(global_fs_list);
 
@@ -408,4 +458,54 @@ int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info)
 out:
 	btrfs_release_path(&path);
 	return ret;
+}
+
+/* Basic sanity check for reads */
+static int check_read(struct btrfs_chunk_map *map, u64 logical, size_t size,
+		      int mirror_nr)
+{
+	enum btrfs_raid_types index = btrfs_bg_flags_to_raid_index(map->flags);
+	int max_mirror = btrfs_raid_array[index].max_mirror;
+
+	if (logical >= map->logical + map->length ||
+	    logical + size <= map->logical) {
+		error("logical %llu is not in chunk range [%llu, %llu)",
+			logical, map->logical, map->logical + map->length);
+		return -EUCLEAN;
+	}
+	if (mirror_nr > max_mirror) {
+		error("bad mirror_nr for logical %llu, has %u wanted %u",
+			logical, max_mirror, mirror_nr);
+		return -EUCLEAN;
+	}
+	return 0;
+}
+
+static int mirrored_read(struct btrfs_fs_info *fs_info,
+			 struct btrfs_chunk_map *map, char *buf, size_t size,
+			 u64 logical, int mirror_nr)
+{
+	int ret;
+	struct btrfs_io_stripe *stripe;
+	u64 offset = logical - map->logical;
+
+	ret = check_read(map, logical, size, mirror_nr);
+	if (ret < 0)
+		return ret;
+
+	stripe = &map->stripes[mirror_nr - 1];
+
+	if (stripe->dev->fd >= 0)
+		ret = btrfs_read_from_disk(stripe->dev->fd, buf,
+					   stripe->physical + offset, size);
+	else
+		ret = -EIO;
+	return ret;
+}
+
+static int unsupported_read(struct btrfs_fs_info *fs_info,
+			    struct btrfs_chunk_map *map, char *buf, size_t size,
+			    u64 logical, int mirror_num)
+{
+	return -ENOTSUP;
 }
