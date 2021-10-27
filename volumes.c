@@ -9,6 +9,8 @@
 #include "messages.h"
 #include "metadata.h"
 
+const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES];
+
 static LIST_HEAD(global_fs_list);
 
 static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
