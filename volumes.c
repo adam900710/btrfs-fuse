@@ -509,3 +509,56 @@ static int unsupported_read(struct btrfs_fs_info *fs_info,
 {
 	return -ENOTSUP;
 }
+
+static struct btrfs_chunk_map *lookup_chunk_map(struct btrfs_fs_info *fs_info,
+						u64 logical)
+{
+	struct rb_node *node = fs_info->mapping_root.rb_node;
+	struct btrfs_chunk_map *entry;
+
+	while (node) {
+		entry = rb_entry(node, struct btrfs_chunk_map, node);
+
+		if (logical < entry->logical)
+			node = node->rb_left;
+		else if (logical >= entry->logical + entry->length)
+			node = node->rb_right;
+		else
+			return entry;
+	}
+	return NULL;
+}
+
+int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical)
+{
+	struct btrfs_chunk_map *map;
+	enum btrfs_raid_types index;
+
+	map = lookup_chunk_map(fs_info, logical);
+	if (!map) {
+		error("can not find chunk for logical %llu", logical);
+		return -ENOENT;
+	}
+
+	index = btrfs_bg_flags_to_raid_index(map->flags);
+	return btrfs_raid_array[index].max_mirror;
+}
+
+int btrfs_read_logical(struct btrfs_fs_info *fs_info, char *buf, size_t size,
+			u64 logical, int mirror_nr)
+{
+	struct btrfs_chunk_map *map;
+	enum btrfs_raid_types index;
+	int ret;
+
+	map = lookup_chunk_map(fs_info, logical);
+	if (!map) {
+		error("can not find chunk for logical %llu", logical);
+		return -ENOENT;
+	}
+	index = btrfs_bg_flags_to_raid_index(map->flags);
+
+	ret = btrfs_raid_array[index].read_func(fs_info, map, buf, size,
+			logical, mirror_nr);
+	return ret;
+}

@@ -139,4 +139,20 @@ struct btrfs_fs_devices *btrfs_open_devices(struct btrfs_fs_info *fs_info);
 int btrfs_read_sys_chunk_array(struct btrfs_fs_info *fs_info);
 int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info);
 
+/*
+ * Return >0 for the max mirror number of the chunk containing @logical.
+ * Return <0 for error.
+ */
+int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical);
+
+/*
+ * Read from logical bytenr @logical with @mirror_nr as mirror number.
+ *
+ * This doesn't have any validation like data checksum nor metadata checksum.
+ *
+ * Return the number of bytes read from @logical.
+ * Return <0 for error.
+ */
+int btrfs_read_logical(struct btrfs_fs_info *fs_info, char *buf, size_t size,
+			u64 logical, int mirror_nr);
 #endif

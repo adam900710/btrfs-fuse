@@ -47,6 +47,8 @@ struct btrfs_fs_info {
 	/* Cached basic sizes */
 	u32 nodesize;
 	u32 sectorsize;
+	u16 csum_size;
+	u16 csum_type;
 	struct btrfs_fs_devices *fs_devices;
 	struct btrfs_super_block super_copy;
 };

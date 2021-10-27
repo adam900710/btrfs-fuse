@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "metadata.h"
+#include "volumes.h"
 #include "messages.h"
+#include "hash.h"
 
 void free_extent_buffer(struct extent_buffer *eb)
 {
@@ -78,6 +80,8 @@ struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 	struct rb_node **p = &fs_info->eb_root.rb_node;
 	struct rb_node *parent = NULL;
 	struct extent_buffer *eb;
+	int mirror_nr;
+	int max_mirror;
 	int ret = 0;
 
 	while (*p) {
@@ -101,22 +105,42 @@ struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 		}
 	}
 
+	max_mirror = btrfs_num_copies(fs_info, logical);
+	if (max_mirror < 0)
+		return ERR_PTR(max_mirror);
+
 	eb = calloc(1, sizeof(*eb) + fs_info->nodesize);
 	if (!eb)
 		return ERR_PTR(-ENOMEM);
 	eb->start = logical;
 	eb->len = fs_info->nodesize;
-	eb->refs = 1;
+	eb->refs = 0;
 	eb->fs_info = fs_info;
-	rb_link_node(&eb->node, parent, p);
-	rb_insert_color(&eb->node, &fs_info->eb_root);
+	for (mirror_nr = 1; mirror_nr <= max_mirror; mirror_nr++) {
+		u8 csum[BTRFS_CSUM_SIZE];
 
-	/*
-	 * TODO: need to co-operate with volumes.c to grab the chunk
-	 * map and read from disk and verify them.
-	 */
+		ret = btrfs_read_logical(fs_info, eb->data,
+					 fs_info->nodesize, logical, mirror_nr);
+		/* Btrfs metadata should be read out in one go. */
+		if (ret < fs_info->nodesize)
+			continue;
+		ret = verify_tree_block(eb, level, transid, first_key);
+		if (ret < 0)
+			continue;
+		btrfs_csum_data(fs_info->csum_type,
+				(u8 *)eb->data + BTRFS_CSUM_SIZE, csum,
+				fs_info->nodesize - BTRFS_CSUM_SIZE);
+		if (memcmp(csum, eb->data, fs_info->csum_size))
+			continue;
+		/* TODO: Add extra sanity check on the tree block contents */
+		eb->refs++;
+		rb_link_node(&eb->node, parent, p);
+		rb_insert_color(&eb->node, &fs_info->eb_root);
+		return eb;
+	}
 
-	return eb;
+	free(eb);
+	return ERR_PTR(-EIO);
 }
 
 /*
