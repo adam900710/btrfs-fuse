@@ -3,6 +3,7 @@
 #ifndef BTRFS_FUSE_METADATA_H
 #define BTRFS_FUSE_METADATA_H
 
+#include <stdbool.h>
 #include "ctree.h"
 
 struct btrfs_path {
@@ -67,6 +68,15 @@ void free_extent_buffer(struct extent_buffer *eb);
 struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 					    u64 logical, u8 level, u64 transid,
 					    struct btrfs_key *first_key);
+
+static inline bool is_fstree(u64 rootid)
+{
+	return (rootid == BTRFS_FS_TREE_OBJECTID) ||
+		(rootid >= BTRFS_FIRST_FREE_OBJECTID &&
+		 rootid < BTRFS_LAST_FREE_OBJECTID);
+}
+
+struct btrfs_root *btrfs_read_root(struct btrfs_fs_info *fs_info, u64 rootid);
 
 /*
  * Search a single key to find an exact match

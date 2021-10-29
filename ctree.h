@@ -11,15 +11,9 @@
 
 struct btrfs_root {
 	struct extent_buffer *node;
-	struct btrfs_root_item root_item;
 	struct btrfs_key root_key;
 	struct btrfs_fs_info *fs_info;
-
-	/* the dirty list is only used by non-reference counted roots */
-	struct list_head dirty_list;
 	struct rb_node rb_node;
-
-	int refs;
 };
 
 /* Represents a btrfs filesystem */

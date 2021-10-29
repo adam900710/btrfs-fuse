@@ -419,3 +419,147 @@ int btrfs_search_keys_next(struct btrfs_path *path,
 		return 0;
 	return 1;
 }
+
+static struct btrfs_root *find_cached_subvol_root(struct btrfs_fs_info *fs_info,
+						  u64 rootid)
+{
+	struct rb_node *node = fs_info->subvols_root.rb_node;
+	struct btrfs_root *root;
+
+	while (node) {
+		root = rb_entry(node, struct btrfs_root, rb_node);
+
+		if (rootid < root->root_key.objectid)
+			node = node->rb_left;
+		else if (rootid > root->root_key.objectid)
+			node = node->rb_right;
+		else
+			return root;
+	}
+	return NULL;
+}
+
+static int search_root_item(struct btrfs_fs_info *fs_info, u64 rootid,
+			    struct btrfs_key *found_key,
+			    struct btrfs_root_item *ri)
+{
+	struct btrfs_key_range key_range;
+	struct btrfs_path path;
+	int ret;
+
+	/* At this stage, root tree must be initialized */
+	ASSERT(fs_info->tree_root);
+
+	btrfs_init_path(&path);
+	key_range.objectid = rootid;
+	key_range.type_start = key_range.type_end = BTRFS_ROOT_ITEM_KEY;
+	key_range.offset_start = 0;
+	key_range.offset_end = (u64)-1;
+
+	ret = btrfs_search_keys_start(fs_info->tree_root, &path, &key_range);
+	if (ret < 0)
+		return ret;
+
+	memset(ri, 0, sizeof(*ri));
+	read_extent_buffer(path.nodes[0], ri,
+			btrfs_item_ptr_offset(path.nodes[0], path.slots[0]),
+			btrfs_item_size_nr(path.nodes[0], path.slots[0]));
+	btrfs_item_key_to_cpu(path.nodes[0], found_key, path.slots[0]);
+	btrfs_release_path(&path);
+	return 0;
+}
+
+struct btrfs_root *btrfs_read_root(struct btrfs_fs_info *fs_info, u64 rootid)
+{
+	struct btrfs_super_block *sb = &fs_info->super_copy;
+	struct btrfs_root *root;
+	struct btrfs_key root_key = {};
+	u64 gen;
+	u64 bytenr;
+	u8 level;
+	int ret;
+
+	/* For non-subvolume trees, return cached result */
+	if (rootid == BTRFS_CHUNK_TREE_OBJECTID && fs_info->chunk_root)
+		return fs_info->chunk_root;
+	if (rootid == BTRFS_ROOT_TREE_OBJECTID && fs_info->tree_root)
+		return fs_info->tree_root;
+	if (rootid == BTRFS_CSUM_TREE_OBJECTID && fs_info->csum_root)
+		return fs_info->csum_root;
+
+	root = find_cached_subvol_root(fs_info, rootid);
+	if (root)
+		return root;
+
+	root = calloc(1, sizeof(*root));
+	if (!root)
+		return ERR_PTR(-ENOMEM);
+
+	RB_CLEAR_NODE(&root->rb_node);
+	root->fs_info = fs_info;
+
+	root_key.type = BTRFS_ROOT_ITEM_KEY;
+	root_key.offset = 0;
+	/*
+	 * Allocate a new root and read from disk, we need to grab the info for
+	 * the root tree block.
+	 *
+	 * For chunk and root tree, they need to be grabbed from superblock, all
+	 * other trees needs to be grabed from tree root.
+	 */
+	if (rootid == BTRFS_CHUNK_TREE_OBJECTID) {
+		gen = btrfs_super_chunk_root_generation(sb);
+		level = btrfs_super_chunk_root_level(sb);
+		bytenr = btrfs_super_chunk_root(sb);
+		root_key.objectid = rootid;
+		root_key.type = BTRFS_ROOT_ITEM_KEY;
+		root_key.offset = 0;
+	} else if (rootid == BTRFS_ROOT_TREE_OBJECTID){
+		gen = btrfs_super_generation(sb);
+		level = btrfs_super_root_level(sb);
+		bytenr = btrfs_super_root(sb);
+		root_key.objectid = rootid;
+	} else {
+		struct btrfs_root_item ri;
+
+		ret = search_root_item(fs_info, rootid, &root_key, &ri);
+		if (ret < 0)
+			return ERR_PTR(ret);
+		gen = btrfs_root_generation(&ri);
+		level = btrfs_root_level(&ri);
+		bytenr = btrfs_root_bytenr(&ri);
+	}
+
+	memcpy(&root->root_key, &root_key, sizeof(root_key));
+	root->node = btrfs_read_tree_block(fs_info, bytenr, level, gen, NULL);
+	if (IS_ERR(root->node)) {
+		ret = PTR_ERR(root->node);
+		free(root);
+		return ERR_PTR(ret);
+	}
+
+	/* If it's a subvolume tree, also add it to subvols_root rb tree */
+	if (is_fstree(rootid)) {
+		struct rb_node **p = &fs_info->subvols_root.rb_node;
+		struct rb_node *parent = NULL;
+		struct btrfs_root *entry;
+
+		while (*p) {
+			parent = *p;
+			entry = rb_entry(parent, struct btrfs_root, rb_node);
+
+			if (rootid < entry->root_key.objectid) {
+				p = &(*p)->rb_left;
+			} else if (rootid > entry->root_key.objectid) {
+				p = &(*p)->rb_right;
+			} else {
+				free_extent_buffer(root->node);
+				free(root);
+				return ERR_PTR(-EEXIST);
+			}
+		}
+		rb_link_node(&root->rb_node, parent, p);
+		rb_insert_color(&root->rb_node, &fs_info->subvols_root);
+	}
+	return root;
+}
