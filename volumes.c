@@ -4,10 +4,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/limits.h>
+#include <uuid.h>
 #include "volumes.h"
 #include "super.h"
 #include "messages.h"
 #include "metadata.h"
+#include "ctree.h"
 
 /*
  * This is for SINGLE/DUP/RAID1C*, which is purely mirror based.
@@ -561,4 +563,32 @@ int btrfs_read_logical(struct btrfs_fs_info *fs_info, char *buf, size_t size,
 	ret = btrfs_raid_array[index].read_func(fs_info, map, buf, size,
 			logical, mirror_nr);
 	return ret;
+}
+
+void btrfs_exit(void)
+{
+	struct btrfs_fs_devices *fs_devs;
+	struct btrfs_fs_devices *tmp_devs;
+
+	list_for_each_entry_safe(fs_devs, tmp_devs, &global_fs_list, fs_list) {
+		struct btrfs_device *dev;
+		struct btrfs_device *tmp;
+
+		list_for_each_entry_safe(dev, tmp, &fs_devs->dev_list, list) {
+			if (dev->fd > 0) {
+				char fsid_buf[BTRFS_UUID_UNPARSED_SIZE];
+
+				uuid_unparse(fs_devs->fsid, fsid_buf);
+				warning("devid %llu for fsid %s is not closed",
+					dev->devid, fsid_buf);
+				close(dev->fd);
+				dev->fd = -1;
+			}
+			free(dev->path);
+			list_del(&dev->list);
+			free(dev);
+		}
+		list_del(&fs_devs->fs_list);
+		free(fs_devs);
+	}
 }

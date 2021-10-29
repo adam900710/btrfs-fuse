@@ -155,4 +155,8 @@ int btrfs_num_copies(struct btrfs_fs_info *fs_info, u64 logical);
  */
 int btrfs_read_logical(struct btrfs_fs_info *fs_info, char *buf, size_t size,
 			u64 logical, int mirror_nr);
+
+/* The equivalent of btrfs_cleanup_fs_uuid() of kernel */
+void btrfs_exit(void);
+
 #endif
