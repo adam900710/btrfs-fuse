@@ -3,11 +3,14 @@
 #include <unistd.h>
 #include <errno.h>
 #include <uuid.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "ondisk_format.h"
 #include "super.h"
 #include "messages.h"
 #include "hash.h"
 #include "volumes.h"
+#include "metadata.h"
 
 int btrfs_read_from_disk(int fd, char *buf, u64 offset, u32 len)
 {
@@ -35,7 +38,7 @@ int btrfs_check_super(struct btrfs_super_block *sb)
 	int csum_size;
 
 	if (btrfs_super_magic(sb) != BTRFS_MAGIC)
-		return -EIO;
+		return -EINVAL;
 
 	csum_type = btrfs_super_csum_type(sb);
 	if (csum_type >= btrfs_super_num_csums()) {
@@ -170,4 +173,143 @@ int btrfs_check_super(struct btrfs_super_block *sb)
 error_out:
 	error("superblock checksum matches but it has invalid members");
 	return -EIO;
+}
+
+static void free_root(struct btrfs_root *root)
+{
+	if (!root || IS_ERR(root))
+		return;
+	free_extent_buffer(root->node);
+	free(root);
+}
+
+static void free_chunk_maps(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_chunk_map *map;
+	struct btrfs_chunk_map *tmp;
+
+	rbtree_postorder_for_each_entry_safe(map, tmp, &fs_info->mapping_root,
+					     node)
+		free(map);
+}
+
+void btrfs_unmount(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_root *root;
+	struct btrfs_root *tmp;
+	struct btrfs_device *dev;
+
+	rbtree_postorder_for_each_entry_safe(root, tmp, &fs_info->subvols_root,
+					     rb_node)
+		free_root(root);
+
+	free_root(fs_info->csum_root);
+	free_root(fs_info->tree_root);
+	free_root(fs_info->chunk_root);
+
+	/*
+	 * At this stage, all extent buffers should be free, just to catch
+	 * unreleased ones.
+	 */
+	if (!RB_EMPTY_ROOT(&fs_info->eb_root)) {
+		struct extent_buffer *eb;
+		struct extent_buffer *tmp;
+		warning("unreleased extent buffers detected");
+
+		rbtree_postorder_for_each_entry_safe(eb, tmp, &fs_info->eb_root,
+						     node) {
+			warning("eb %llu unreleased", eb->start);
+			free(eb);
+		}
+	}
+
+	/* Now free the chunk maps */
+	free_chunk_maps(fs_info);
+
+	if (!fs_info->fs_devices)
+		goto out;
+
+	/* Finally close all devices */
+	list_for_each_entry(dev, &fs_info->fs_devices->dev_list, list) {
+		if (dev->fd >= 0) {
+			close(dev->fd);
+			dev->fd = -1;
+		}
+	}
+out:
+	free(fs_info);
+}
+
+struct btrfs_fs_info *btrfs_mount(const char *path)
+{
+	struct btrfs_fs_info *fs_info;
+	int ret;
+
+	fs_info = calloc(1, sizeof(*fs_info));
+	if (!fs_info)
+		return ERR_PTR(-ENOMEM);
+
+	/* Check if there is btrfs on the device */
+	ret = btrfs_scan_device(path, &fs_info->super_copy);
+	if (ret < 0) {
+		if (ret == -EINVAL)
+			error("no btrfs found at %s", path);
+		else
+			error("failed to scan device %s: %d", path, ret);
+		goto error;
+	}
+	fs_info->sectorsize = btrfs_super_sectorsize(&fs_info->super_copy);
+	fs_info->nodesize = btrfs_super_nodesize(&fs_info->super_copy);
+	fs_info->csum_type = btrfs_super_csum_type(&fs_info->super_copy);
+	fs_info->csum_size = btrfs_super_csum_size(&fs_info->super_copy);
+	memcpy(fs_info->fsid, fs_info->super_copy.fsid, BTRFS_UUID_SIZE);
+
+	/* Now open all invovled devices of the fs */
+	fs_info->fs_devices = btrfs_open_devices(fs_info);
+	if (IS_ERR(fs_info->fs_devices)) {
+		ret = PTR_ERR(fs_info->fs_devices);
+		error("failed to grab fs_devs: %d", ret);
+		goto error;
+	}
+
+	/* Then read the system chunk array */
+	ret = btrfs_read_sys_chunk_array(fs_info);
+	if (ret < 0) {
+		error("failed to read system chunk array: %d", ret);
+		goto error;
+	}
+
+	/* Now we can read the chunk tree */
+	fs_info->chunk_root = btrfs_read_root(fs_info,
+					      BTRFS_CHUNK_TREE_OBJECTID);
+	if (IS_ERR(fs_info->chunk_root)) {
+		ret = PTR_ERR(fs_info->chunk_root);
+		error("failed to read chunk root: %d", ret);
+		goto error;
+	}
+
+	/* Then read the chunk tree */
+	ret = btrfs_read_chunk_tree(fs_info);
+	if (ret < 0) {
+		error("failed to iterate chunk tree: %d", ret);
+		goto error;
+	}
+
+	/* Read the remaining trees */
+	fs_info->tree_root = btrfs_read_root(fs_info, BTRFS_ROOT_TREE_OBJECTID);
+	if (IS_ERR(fs_info->tree_root)) {
+		ret = PTR_ERR(fs_info->tree_root);
+		error("failed to read tree root: %d", ret);
+		goto error;
+	}
+	fs_info->csum_root = btrfs_read_root(fs_info, BTRFS_CSUM_TREE_OBJECTID);
+	if (IS_ERR(fs_info->csum_root)) {
+		ret = PTR_ERR(fs_info->csum_root);
+		error("failed to read csum root: %d", ret);
+		goto error;
+	}
+	return fs_info;
+error:
+	btrfs_unmount(fs_info);
+	return ERR_PTR(ret);
 }
