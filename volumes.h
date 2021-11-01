@@ -88,7 +88,9 @@ struct btrfs_chunk_map {
 
 	u64 logical;
 	u64 length;
+	u64 stripe_len;
 	u64 flags;
+	u16 sub_stripes;
 
 	int num_stripes;
 	struct btrfs_io_stripe stripes[];

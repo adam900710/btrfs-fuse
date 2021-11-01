@@ -5,6 +5,12 @@
 #include <unistd.h>
 #include <linux/limits.h>
 #include <uuid.h>
+#include <btrfs/kerncompat.h>
+/*
+ * For basic MIN()/MAX(), but it's not as good as kernel min()/max(),
+ * thus we shouldn't use anything like MIN(x++,y).
+ */
+#include <sys/param.h>
 #include "volumes.h"
 #include "super.h"
 #include "messages.h"
@@ -20,6 +26,14 @@ static int mirrored_read(struct btrfs_fs_info *fs_info,
 			 struct btrfs_chunk_map *map, char *buf, size_t size,
 			 u64 logical, int mirror_num);
 
+/*
+ * For RAID0/RAID10, which is pure stripe based with mirrors, no pairty nor
+ * stripe rotation.
+ */
+static int simple_stripe_read(struct btrfs_fs_info *fs_info,
+			      struct btrfs_chunk_map *map, char *buf, size_t size,
+			      u64 logical, int mirror_nr);
+
 /* Place holder for unsupported profiles */
 static int unsupported_read(struct btrfs_fs_info *fs_info,
 			    struct btrfs_chunk_map *map, char *buf, size_t size,
@@ -31,7 +45,7 @@ const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	},
 	[BTRFS_RAID_RAID0] = {
 		.max_mirror = 1,
-		.read_func = unsupported_read,
+		.read_func = simple_stripe_read,
 	},
 	[BTRFS_RAID_RAID1] = {
 		.max_mirror = 2,
@@ -43,7 +57,7 @@ const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	},
 	[BTRFS_RAID_RAID10] = {
 		.max_mirror = 2,
-		.read_func = unsupported_read,
+		.read_func = simple_stripe_read,
 	},
 	[BTRFS_RAID_RAID5] = {
 		.max_mirror = 2,
@@ -288,6 +302,8 @@ static int add_chunk_map(struct btrfs_fs_info *fs_info, u64 logical,
 		return -ENOMEM;
 	map->length = length;
 	map->logical = logical;
+	map->stripe_len = btrfs_stack_chunk_stripe_len(stack_chunk);
+	map->sub_stripes = btrfs_stack_chunk_sub_stripes(stack_chunk);
 	map->flags = btrfs_stack_chunk_type(stack_chunk);
 	map->num_stripes = num_stripes;
 
@@ -500,6 +516,53 @@ static int mirrored_read(struct btrfs_fs_info *fs_info,
 	if (stripe->dev->fd >= 0)
 		ret = btrfs_read_from_disk(stripe->dev->fd, buf,
 					   stripe->physical + offset, size);
+	else
+		ret = -EIO;
+	return ret;
+}
+
+static int simple_stripe_read(struct btrfs_fs_info *fs_info,
+			      struct btrfs_chunk_map *map, char *buf, size_t size,
+			      u64 logical, int mirror_nr)
+{
+	struct btrfs_io_stripe *stripe;
+	int ret;
+	const u64 offset = logical - map->logical;
+	const u64 stripe_len = map->stripe_len;
+	const u16 sub_stripes = map->sub_stripes;
+	const u16 num_stripes = map->num_stripes;
+	int group_nr;		/* How many groups needs to be skipped */
+	u64 len;
+
+	ret = check_read(map, logical, size, mirror_nr);
+	if (ret < 0)
+		return ret;
+	/*
+	 * Current btrfs is using fixed stripe len (64K), and we will later
+	 * rely on round_down() which requires the parameter is power of 2.
+	 */
+	ASSERT(is_power_of_2(stripe_len));
+	len = MIN(size, round_down(offset + stripe_len, stripe_len) - offset);
+
+	/*
+	 * Calculate how many groups we need to skip.
+	 *
+	 * For RAID0, sub_stripes is 1, so it's just (offset / stripe_len) %
+	 * num_stripes.
+	 *
+	 * For RAID10, sub_stripes is 2, so it's (offset / stripe_len) %
+	 * (num_stripes / 2) * 2
+	 *
+	 * This is gives the number where the logical bytenr will be located.
+	 * Based on @group_nr, it's now just RAID1.
+	 */
+	group_nr = (offset / stripe_len) % (num_stripes / sub_stripes) * sub_stripes;
+	stripe = &map->stripes[group_nr + mirror_nr - 1];
+
+	/* Now do the real IO */
+	if (stripe->dev->fd >= 0)
+		ret = btrfs_read_from_disk(stripe->dev->fd, buf,
+				stripe->physical + offset % stripe_len, len);
 	else
 		ret = -EIO;
 	return ret;
