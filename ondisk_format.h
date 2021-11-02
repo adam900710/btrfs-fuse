@@ -71,6 +71,12 @@ enum btrfs_csum_type {
 #define BTRFS_DEV_ITEMS_OBJECTID	1ULL
 #define BTRFS_CHUNK_TREE_OBJECTID	3ULL
 #define BTRFS_FS_TREE_OBJECTID		5ULL
+
+/*
+ * This is for a special dir inode in root tree to indicate which root is the
+ * default subvolume (stored as a DIR_ITEM).
+ */
+#define BTRFS_ROOT_TREE_DIR_OBJECTID	6ULL
 #define BTRFS_CSUM_TREE_OBJECTID	7ULL
 #define BTRFS_FIRST_CHUNK_TREE_OBJECTID	256ULL
 #define BTRFS_FIRST_FREE_OBJECTID	256ULL

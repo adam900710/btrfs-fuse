@@ -240,6 +240,31 @@ out:
 	free(fs_info);
 }
 
+static struct btrfs_root *read_default_root(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_key_range range;
+	struct btrfs_dir_item *di;
+	struct btrfs_path path;
+	struct btrfs_key key;
+	int ret;
+
+	btrfs_init_path(&path);
+	range.objectid = BTRFS_ROOT_TREE_DIR_OBJECTID;
+	range.type_start = range.type_end = BTRFS_DIR_ITEM_KEY;
+	range.offset_start = 0;
+	range.offset_end = (u64)-1;
+
+	ret = btrfs_search_keys_start(fs_info->tree_root, &path, &range);
+	if (ret < 0)
+		return ERR_PTR(ret);
+	di = btrfs_item_ptr(path.nodes[0], path.slots[0], struct btrfs_dir_item);
+	btrfs_dir_item_key_to_cpu(path.nodes[0], di, &key);
+	btrfs_release_path(&path);
+
+	ASSERT(is_fstree(key.objectid));
+	return btrfs_read_root(fs_info, key.objectid);
+}
+
 struct btrfs_fs_info *btrfs_mount(const char *path)
 {
 	struct btrfs_fs_info *fs_info;
@@ -306,6 +331,12 @@ struct btrfs_fs_info *btrfs_mount(const char *path)
 	if (IS_ERR(fs_info->csum_root)) {
 		ret = PTR_ERR(fs_info->csum_root);
 		error("failed to read csum root: %d", ret);
+		goto error;
+	}
+	fs_info->default_root = read_default_root(fs_info);
+	if (IS_ERR(fs_info->default_root)) {
+		ret = PTR_ERR(fs_info->default_root);
+		error("failed to read default root: %d", ret);
 		goto error;
 	}
 	return fs_info;
