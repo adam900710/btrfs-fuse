@@ -212,3 +212,62 @@ int btrfs_read_link(struct btrfs_fs_info *fs_info,
 	btrfs_release_path(&path);
 	return read_size;
 }
+
+int btrfs_iterate_dir_start(struct btrfs_fs_info *fs_info,
+			    struct btrfs_iterate_dir_ctrl *ctrl,
+			    const struct btrfs_inode *dir, u64 start_index)
+{
+	struct btrfs_key_range *range = &ctrl->range;
+
+	ASSERT(dir->file_type == BTRFS_FT_DIR);
+
+	range->objectid = dir->ino;
+	range->type_start = range->type_end = BTRFS_DIR_INDEX_KEY;
+	range->offset_start = start_index;
+	range->offset_end = (u64)-1;
+
+	ctrl->dir.ino = dir->ino;
+	ctrl->dir.root = dir->root;
+	ctrl->dir.file_type = dir->file_type;
+	btrfs_init_path(&ctrl->path);
+
+	return btrfs_search_keys_start(ctrl->dir.root, &ctrl->path, &ctrl->range);
+}
+
+int btrfs_iterate_dir_get_inode(struct btrfs_fs_info *fs_info,
+				struct btrfs_iterate_dir_ctrl *ctrl,
+				struct btrfs_inode *entry,
+				u64 *index_ret, char *name, size_t *name_len)
+{
+	struct btrfs_dir_item *di;
+	struct btrfs_key key;
+
+	btrfs_item_key_to_cpu(ctrl->path.nodes[0], &key, ctrl->path.slots[0]);
+	ASSERT(key.type == BTRFS_DIR_INDEX_KEY);
+
+	if (index_ret)
+		*index_ret = key.offset;
+
+	di = btrfs_item_ptr(ctrl->path.nodes[0], ctrl->path.slots[0],
+			    struct btrfs_dir_item);
+	btrfs_dir_item_key_to_cpu(ctrl->path.nodes[0], di, &key);
+
+	if (key.type == BTRFS_INODE_ITEM_KEY) {
+		entry->root = ctrl->dir.root;
+		entry->ino = key.objectid;
+	} else {
+		struct btrfs_root *root;
+		root = btrfs_read_root(fs_info, key.objectid);
+		if (IS_ERR(root))
+			return PTR_ERR(root);
+
+		entry->root = root;
+		entry->ino = root->root_dirid;
+	}
+	entry->file_type = btrfs_dir_type(ctrl->path.nodes[0], di);
+
+	*name_len = btrfs_dir_name_len(ctrl->path.nodes[0], di);
+	read_extent_buffer(ctrl->path.nodes[0], name, (unsigned long)(di + 1),
+			   *name_len);
+	return 0;
+}

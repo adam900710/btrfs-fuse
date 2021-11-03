@@ -7,6 +7,7 @@
 #include <asm-generic/types.h>
 #include "ondisk_format.h"
 #include "ctree.h"
+#include "metadata.h"
 
 /*
  * Represent one inode in a btrfs.
@@ -62,4 +63,55 @@ int btrfs_resolve_path(struct btrfs_fs_info *fs_info,
 int btrfs_read_link(struct btrfs_fs_info *fs_info,
 		    struct btrfs_inode *inode, char *output,
 		    size_t output_size);
+
+struct btrfs_iterate_dir_ctrl {
+	struct btrfs_path path;
+	struct btrfs_inode dir;
+	struct btrfs_key_range range;
+};
+
+/*
+ * Interafaces to iterate one dir.
+ *
+ * The common usage would be:
+ *
+ * struct btrfs_iterate_dir_ctrl ctrl = {};
+ * int ret;
+ *
+ * ret = btrfs_iterate_dir_start(fs_info, &ctrl, dir, 0); // start from index 0
+ *
+ * while (ret == 0) {
+ * 	struct btrfs_inode found_entry;
+ *	char name_buf[NAME_MAX] = {};
+ *	size_t name_len;
+ *
+ *	ret = btrfs_iterate_dir_get_inode(fs_info, &ctrl,
+ *			&found_entry, name_buf, &name_len);
+ *	// Do something using found_entry/name_buf.
+ *
+ *	ret = btrfs_iterate_dir_next(fs_info, &ctrl);
+ * }
+ * btrfs_iterate_dir_end(fs_info, &ctrl);
+ */
+int btrfs_iterate_dir_start(struct btrfs_fs_info *fs_info,
+			    struct btrfs_iterate_dir_ctrl *ctrl,
+			    const struct btrfs_inode *dir, u64 start_index);
+
+int btrfs_iterate_dir_get_inode(struct btrfs_fs_info *fs_info,
+				struct btrfs_iterate_dir_ctrl *ctrl,
+				struct btrfs_inode *entry,
+				u64 *index_ret, char *name, size_t *name_len);
+
+static inline int btrfs_iterate_dir_next(struct btrfs_fs_info *fs_info,
+					 struct btrfs_iterate_dir_ctrl *ctrl)
+{
+	return btrfs_search_keys_next(&ctrl->path, &ctrl->range);
+}
+
+static inline void btrfs_iterate_dir_end(struct btrfs_fs_info *fs_info,
+					 struct btrfs_iterate_dir_ctrl *ctrl)
+{
+	btrfs_release_path(&ctrl->path);
+}
+
 #endif
