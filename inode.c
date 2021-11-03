@@ -2,6 +2,7 @@
 
 #include <strings.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 #include "inode.h"
 #include "ctree.h"
 #include "metadata.h"
@@ -269,5 +270,49 @@ int btrfs_iterate_dir_get_inode(struct btrfs_fs_info *fs_info,
 	*name_len = btrfs_dir_name_len(ctrl->path.nodes[0], di);
 	read_extent_buffer(ctrl->path.nodes[0], name, (unsigned long)(di + 1),
 			   *name_len);
+	return 0;
+}
+
+int btrfs_stat(struct btrfs_fs_info *fs_info, struct btrfs_inode *inode,
+	       struct stat *stbuf)
+{
+	struct btrfs_inode_item *ii;
+	struct extent_buffer *leaf;
+	struct btrfs_path path;
+	struct btrfs_key key;
+	int ret;
+
+	btrfs_init_path(&path);
+	key.objectid = inode->ino;
+	key.type = BTRFS_INODE_ITEM_KEY;
+	key.offset = 0;
+
+	ret = btrfs_search_key(inode->root, &path, &key);
+	if (ret < 0)
+		return ret;
+
+	leaf = path.nodes[0];
+	ii = btrfs_item_ptr(leaf, path.slots[0], struct btrfs_inode_item);
+	stbuf->st_blksize = fs_info->sectorsize;
+	stbuf->st_blocks = btrfs_inode_nbytes(leaf, ii) >> SECTOR_SHIFT;
+	stbuf->st_size = btrfs_inode_size(leaf, ii);
+	stbuf->st_gid = btrfs_inode_gid(leaf, ii);
+	stbuf->st_uid = btrfs_inode_uid(leaf, ii);
+	stbuf->st_mode = btrfs_inode_gid(leaf, ii);
+	stbuf->st_ino = inode->ino;
+	stbuf->st_nlink = btrfs_inode_nlink(leaf, ii);
+	stbuf->st_mode = btrfs_inode_mode(leaf, ii);
+	stbuf->st_atim.tv_sec = btrfs_timespec_sec(leaf, btrfs_inode_atime(ii));
+	stbuf->st_atim.tv_nsec = btrfs_timespec_nsec(leaf, btrfs_inode_atime(ii));
+	stbuf->st_ctim.tv_sec = btrfs_timespec_sec(leaf, btrfs_inode_ctime(ii));
+	stbuf->st_ctim.tv_nsec = btrfs_timespec_nsec(leaf, btrfs_inode_ctime(ii));
+	stbuf->st_mtim.tv_sec = btrfs_timespec_sec(leaf, btrfs_inode_mtime(ii));
+	stbuf->st_mtim.tv_nsec = btrfs_timespec_nsec(leaf, btrfs_inode_mtime(ii));
+	/*
+	 * We don't have a good way to emulate the same anonymous device
+	 * numbers in kernel. Thus here we just use subvolid id.
+	 */
+	stbuf->st_dev = inode->root->root_key.objectid;
+	btrfs_release_path(&path);
 	return 0;
 }

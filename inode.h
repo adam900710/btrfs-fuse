@@ -114,4 +114,6 @@ static inline void btrfs_iterate_dir_end(struct btrfs_fs_info *fs_info,
 	btrfs_release_path(&ctrl->path);
 }
 
+int btrfs_stat(struct btrfs_fs_info *fs_info, struct btrfs_inode *inode,
+	       struct stat *stbuf);
 #endif
