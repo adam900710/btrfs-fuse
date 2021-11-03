@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <strings.h>
+#include <sys/param.h>
 #include "inode.h"
 #include "ctree.h"
 #include "metadata.h"
@@ -147,4 +148,67 @@ int btrfs_resolve_path(struct btrfs_fs_info *fs_info,
 
 	memcpy(inode_ret, &cur_inode, sizeof(cur_inode));
 	return 0;
+}
+
+int btrfs_read_link(struct btrfs_fs_info *fs_info,
+		    struct btrfs_inode *inode, char *output,
+		    size_t output_size)
+{
+	struct btrfs_file_extent_item *fi;
+	struct btrfs_path path;
+	struct btrfs_key key;
+	u32 read_size;
+	int ret;
+
+	ASSERT(inode->file_type == BTRFS_FT_SYMLINK);
+
+	btrfs_init_path(&path);
+	key.objectid = inode->ino;
+	key.type = BTRFS_EXTENT_DATA_KEY;
+	key.offset = 0;
+
+	ret = btrfs_search_key(inode->root, &path, &key);
+	if (ret < 0) {
+		btrfs_release_path(&path);
+		return ret;
+	}
+
+	fi = btrfs_item_ptr(path.nodes[0], path.slots[0],
+			    struct btrfs_file_extent_item);
+	if (btrfs_file_extent_type(path.nodes[0], fi) !=
+	    BTRFS_FILE_EXTENT_INLINE) {
+		error("invalid file extent type, has %u expect %u",
+			btrfs_file_extent_type(path.nodes[0], fi),
+			BTRFS_FILE_EXTENT_INLINE);
+		btrfs_release_path(&path);
+		return -EUCLEAN;
+	}
+	if (btrfs_file_extent_compression(path.nodes[0], fi) !=
+	    BTRFS_COMPRESS_NONE) {
+		error("invalid file extent compression, has %u expect %u",
+			btrfs_file_extent_compression(path.nodes[0], fi),
+			BTRFS_COMPRESS_NONE);
+		btrfs_release_path(&path);
+		return -EUCLEAN;
+	}
+	if (btrfs_file_extent_ram_bytes(path.nodes[0], fi) == 0) {
+		error("empty link length");
+		btrfs_release_path(&path);
+		return -EUCLEAN;
+	}
+	if (btrfs_file_extent_ram_bytes(path.nodes[0], fi) >= PATH_MAX) {
+		error("invalid link length, has %llu max %u",
+			btrfs_file_extent_ram_bytes(path.nodes[0], fi),
+			PATH_MAX);
+		btrfs_release_path(&path);
+		return -ENAMETOOLONG;
+	}
+	read_size = MIN(btrfs_file_extent_ram_bytes(path.nodes[0], fi),
+			output_size - 1);
+	read_extent_buffer(path.nodes[0], output,
+			   btrfs_file_extent_inline_start(fi),
+			   read_size);
+	output[read_size] = '\0';
+	btrfs_release_path(&path);
+	return read_size;
 }

@@ -488,6 +488,50 @@ static inline unsigned long btrfs_leaf_data(struct extent_buffer *l)
 	return offsetof(struct btrfs_leaf, items);
 }
 
+/* struct btrfs_file_extent_item */
+BTRFS_GET_FUNCS(file_extent_type, struct btrfs_file_extent_item, type, 8);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_type, struct btrfs_file_extent_item, type, 8);
+
+static inline unsigned long btrfs_file_extent_inline_start(struct
+						   btrfs_file_extent_item *e)
+{
+	unsigned long offset = (unsigned long)e;
+	offset += offsetof(struct btrfs_file_extent_item, disk_bytenr);
+	return offset;
+}
+
+static inline u32 btrfs_file_extent_calc_inline_size(u32 datasize)
+{
+	return offsetof(struct btrfs_file_extent_item, disk_bytenr) + datasize;
+}
+
+BTRFS_GET_FUNCS(file_extent_disk_bytenr, struct btrfs_file_extent_item,
+		disk_bytenr, 64);
+BTRFS_GET_FUNCS(file_extent_generation, struct btrfs_file_extent_item,
+                generation, 64);
+BTRFS_GET_FUNCS(file_extent_disk_num_bytes, struct btrfs_file_extent_item,
+                disk_num_bytes, 64);
+BTRFS_GET_FUNCS(file_extent_offset, struct btrfs_file_extent_item,
+               offset, 64);
+BTRFS_GET_FUNCS(file_extent_num_bytes, struct btrfs_file_extent_item,
+                num_bytes, 64);
+BTRFS_GET_FUNCS(file_extent_ram_bytes, struct btrfs_file_extent_item,
+                ram_bytes, 64);
+BTRFS_GET_FUNCS(file_extent_compression, struct btrfs_file_extent_item,
+                compression, 8);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_compression, struct btrfs_file_extent_item,
+                compression, 8);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_ram_bytes, struct btrfs_file_extent_item,
+                ram_bytes, 64);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_num_bytes, struct btrfs_file_extent_item,
+                num_bytes, 64);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_offset, struct btrfs_file_extent_item,
+		offset, 64);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_generation, struct btrfs_file_extent_item,
+		generation, 64);
+BTRFS_GET_STACK_FUNCS(stack_file_extent_disk_bytenr, struct btrfs_file_extent_item,
+		disk_bytenr, 64);
+
 u16 btrfs_super_csum_size(const struct btrfs_super_block *sb);
 size_t btrfs_super_num_csums(void);
 #endif

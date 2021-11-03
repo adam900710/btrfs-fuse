@@ -48,4 +48,18 @@ int btrfs_lookup_one_name(struct btrfs_fs_info *fs_info,
 int btrfs_resolve_path(struct btrfs_fs_info *fs_info,
 		       const char *path, size_t path_len,
 		       struct btrfs_inode *inode_ret);
+
+/*
+ * Read the softlink destination into @output.
+ *
+ * @inode must be a soft link.
+ *
+ * Return >0 for the size of the content read (not including
+ * the tailing '\0')
+ * Return <0 for error.
+ * Under no case it would return 0.
+ */
+int btrfs_read_link(struct btrfs_fs_info *fs_info,
+		    struct btrfs_inode *inode, char *output,
+		    size_t output_size);
 #endif
