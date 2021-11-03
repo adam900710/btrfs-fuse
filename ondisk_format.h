@@ -22,6 +22,9 @@
 #define BTRFS_SECTORSIZE_MIN	SZ_4K
 #define BTRFS_SECTORSIZE_MAX	SZ_64K
 
+/* Maximum filename length (without the tailing '\0') */
+#define BTRFS_NAME_LEN		255
+
 /*
  * Supported nodesize range.
  *

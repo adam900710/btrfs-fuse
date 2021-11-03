@@ -8,6 +8,34 @@
 #include "messages.h"
 #include "super.h"
 
+static struct btrfs_fs_info *global_info = NULL;
+
+static int btrfs_fuse_statfs(const char *path, struct statvfs *stbuf)
+{
+	ASSERT(global_info);
+
+	stbuf->f_bsize = global_info->sectorsize;
+	stbuf->f_frsize = global_info->sectorsize;
+	stbuf->f_blocks = btrfs_super_total_bytes(&global_info->super_copy) /
+			  global_info->sectorsize;
+	/*
+	 * Btrfs avaiable space calculation is already complex due to dyanmic
+	 * allocation.
+	 * Since our implementation is read-only, no need to populate those
+		* available values.
+	 */
+	stbuf->f_bavail = 0;
+	stbuf->f_bfree = 0;
+	stbuf->f_favail = 0;
+	stbuf->f_files = 0;
+	stbuf->f_namemax = BTRFS_NAME_LEN;
+	return 0;
+}
+
+static const struct fuse_operations btrfs_fuse_ops = {
+	.statfs		= btrfs_fuse_statfs,
+};
+
 int main(int argc, char *argv[])
 {
 	struct btrfs_fs_info *fs_info;
