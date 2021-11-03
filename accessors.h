@@ -437,6 +437,7 @@ BTRFS_GET_STACK_FUNCS(root_generation, struct btrfs_root_item,
 BTRFS_GET_STACK_FUNCS(root_bytenr, struct btrfs_root_item, bytenr, 64);
 BTRFS_GET_STACK_FUNCS(root_level, struct btrfs_root_item, level, 8);
 BTRFS_GET_STACK_FUNCS(root_flags, struct btrfs_root_item, flags, 64);
+BTRFS_GET_STACK_FUNCS(root_dirid, struct btrfs_root_item, root_dirid, 64);
 
 /*
  * struct btrfs_super_block

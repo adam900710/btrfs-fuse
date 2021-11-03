@@ -14,6 +14,12 @@ struct btrfs_root {
 	struct btrfs_key root_key;
 	struct btrfs_fs_info *fs_info;
 	struct rb_node rb_node;
+
+	/*
+	 * Indicates the first inode number, which is also the inode for the
+	 * subvolume root.
+	 */
+	u64 root_dirid;
 };
 
 /* Represents a btrfs filesystem */

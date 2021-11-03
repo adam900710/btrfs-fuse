@@ -528,6 +528,7 @@ struct btrfs_root *btrfs_read_root(struct btrfs_fs_info *fs_info, u64 rootid)
 		gen = btrfs_root_generation(&ri);
 		level = btrfs_root_level(&ri);
 		bytenr = btrfs_root_bytenr(&ri);
+		root->root_dirid = btrfs_root_dirid(&ri);
 	}
 
 	memcpy(&root->root_key, &root_key, sizeof(root_key));

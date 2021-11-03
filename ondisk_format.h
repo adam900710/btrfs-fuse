@@ -466,7 +466,7 @@ struct btrfs_inode_item {
 struct btrfs_root_item {
 	struct btrfs_inode_item inode;
 	__le64 generation;
-	__le64 __unused1;
+	__le64 root_dirid;
 	__le64 bytenr;
 	__le64 __unused2[3];
 	__le64 flags;
