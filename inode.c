@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include <strings.h>
 #include "inode.h"
 #include "ctree.h"
 #include "metadata.h"
@@ -100,5 +101,50 @@ int btrfs_lookup_one_name(struct btrfs_fs_info *fs_info,
 	inode_ret->root = root;
 	inode_ret->ino = ino;
 	inode_ret->file_type = file_type;
+	return 0;
+}
+
+int btrfs_resolve_path(struct btrfs_fs_info *fs_info,
+		       const char *path, size_t path_len,
+		       struct btrfs_inode *inode_ret)
+{
+	struct btrfs_inode cur_inode;
+	struct btrfs_inode next_inode;
+	size_t offset = 0;
+	char *slash_char;
+	int ret;
+
+	cur_inode.root = fs_info->default_root;
+	cur_inode.ino = fs_info->default_root->root_dirid;
+	cur_inode.file_type = BTRFS_FT_DIR;
+
+	while (offset < path_len) {
+		u32 name_len;
+
+		/* Skip any '/' in the path*/
+		if (path[offset] == '/') {
+			offset++;
+			continue;
+		}
+
+		/* Extract the next filename to resolve */
+		slash_char = memchr(path + offset, '/', path_len - offset);
+		if (slash_char) {
+			name_len = slash_char - (path + offset);
+		} else {
+			/* Last name, no more '/' */
+			name_len = path_len - offset;
+		}
+
+		ret = btrfs_lookup_one_name(fs_info, &cur_inode, path + offset,
+					    name_len, &next_inode);
+		if (ret < 0)
+			return ret;
+
+		memcpy(&cur_inode, &next_inode, sizeof(next_inode));
+		offset += name_len;
+	}
+
+	memcpy(inode_ret, &cur_inode, sizeof(cur_inode));
 	return 0;
 }

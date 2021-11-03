@@ -32,10 +32,20 @@ struct btrfs_inode {
  * a complete path.
  *
  * The result will be put into @inode_ret, which can be either on-stack or
- * allocated memory.
+ * allocated memory. (This applies to all @inode_ret in the header)
  */
 int btrfs_lookup_one_name(struct btrfs_fs_info *fs_info,
 			  struct btrfs_inode *dir, const char *name,
 			  size_t name_len, struct btrfs_inode *inode_ret);
 
+/*
+ * Resolve a full path.
+ *
+ * NOTE: the path should not contain soft link (or ".." or "."), and should be
+ * absolute path (starts with '/').
+ * This is ensured by FUSE already.
+ */
+int btrfs_resolve_path(struct btrfs_fs_info *fs_info,
+		       const char *path, size_t path_len,
+		       struct btrfs_inode *inode_ret);
 #endif
