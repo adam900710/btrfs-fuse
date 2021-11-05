@@ -5,6 +5,7 @@
 
 #include <btrfs/kerncompat.h>
 #include <asm-generic/types.h>
+#include <sys/stat.h>
 #include "ondisk_format.h"
 #include "ctree.h"
 #include "metadata.h"
@@ -112,6 +113,21 @@ static inline void btrfs_iterate_dir_end(struct btrfs_fs_info *fs_info,
 					 struct btrfs_iterate_dir_ctrl *ctrl)
 {
 	btrfs_release_path(&ctrl->path);
+}
+
+static inline u32 btrfs_type_to_imode(u8 btrfs_ft)
+{
+	const static u32 imode_by_btrfs_type[] = {
+		[BTRFS_FT_REG_FILE]	= S_IFREG,
+		[BTRFS_FT_DIR]		= S_IFDIR,
+		[BTRFS_FT_CHRDEV]	= S_IFCHR,
+		[BTRFS_FT_BLKDEV]	= S_IFBLK,
+		[BTRFS_FT_FIFO]		= S_IFIFO,
+		[BTRFS_FT_SOCK]		= S_IFSOCK,
+		[BTRFS_FT_SYMLINK]	= S_IFLNK,
+	};
+
+	return imode_by_btrfs_type[btrfs_ft];
 }
 
 int btrfs_stat(struct btrfs_fs_info *fs_info, struct btrfs_inode *inode,
