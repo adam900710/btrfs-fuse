@@ -196,7 +196,7 @@ static const struct fuse_operations btrfs_fuse_ops = {
 
 void usage(void)
 {
-	fprintf(stderr, "usage: btrfs-fuse [<fuse options>] <device> <mnt>\n");
+	fprintf(stderr, "usage: btrfs-fuse [<fuse options>] <device> [<device>...] <mnt>\n");
 }
 
 int main(int argc, char *argv[])
@@ -204,34 +204,59 @@ int main(int argc, char *argv[])
 	enum { MAX_ARGS = 32 };
 	struct btrfs_fs_info *fs_info;
 	int nargc = 0;
-	char *nargv[MAX_ARGS];
-	char *dev = NULL;
+	char *nargv[MAX_ARGS] = {};
+	char *paras[2] = {};
 	int i;
 
-	/* Pass all parameters but the devices to fuse parameter list */
+	/*
+	 * We pass all parameters to fuse directly, but we want to scan btrfs
+	 * on all parameters except the last one.
+	 */
 	for (i = 0; i < argc && nargc < MAX_ARGS; i++) {
-		/* Pass the options */
-		if (argv[i][0] == '-') {
-			nargv[nargc] = argv[i];
-			nargc++;
+		int ret;
+
+		if (i == 0)
+			goto pass;
+
+		if (argv[i][0] == '-')
+			goto pass;
+
+		/*
+		 * This parameter can be a device or a mount point.
+		 *
+		 * If it's the last parameter, it will be added to nargv[]
+		 * after the loop.
+		 * So we don't need to pass current parameter to fuse.
+		 */
+		paras[1] = paras[0];
+		paras[0] = argv[i];
+		if (!paras[1])
 			continue;
+		/*
+		 * paras[1] is definitely not the last parameter,
+		 * thus it should be a btrfs device.
+		 *
+		 * Do the device scan and don't pass it to fuse.
+		 * Fuse only needs to handle all options and mount point.
+		 */
+		ret = btrfs_scan_device(paras[1], NULL);
+		if (ret < 0) {
+			error("failed to scan device %s: %d", paras[1], ret);
+			btrfs_exit();
+			return 1;
 		}
-		if (!dev && i) {
-			dev = argv[i];
-			continue;
-		}
+		continue;
+pass:
 		nargv[nargc] = argv[i];
 		nargc++;
 	}
+	nargv[nargc] = paras[0];
+	nargc++;
 
-	if (!dev || nargc < 2) {
-		usage();
-		return 1;
-	}
-
-	fs_info = btrfs_mount(dev);
+	fs_info = btrfs_mount(paras[1]);
 	if (IS_ERR(fs_info)) {
-		error("failed to open %s", dev);
+		error("failed to open btrfs on device %s", paras[1]);
+		btrfs_exit();
 		return 1;
 	}
 	global_info = fs_info;

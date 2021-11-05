@@ -131,8 +131,9 @@ static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 			}
 			return ERR_PTR(-ENOMEM);
 		}
-		found_dev->path = strndup(path, PATH_MAX);
-		if (!found_dev->path) {
+		if (path)
+			found_dev->path = strndup(path, PATH_MAX);
+		if (!found_dev->path && path) {
 			if (found_fs_devs->num_devices == 0) {
 				list_del(&found_fs_devs->fs_list);
 				free(found_fs_devs);
