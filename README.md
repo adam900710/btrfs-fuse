@@ -60,7 +60,7 @@ This project has the following dependency:
 Limitation
 ----------
 
-Currently `btrfs-fuse` has the following features missing:
+Currently `btrfs-fuse` has the following btrfs features missing:
 
 - RAID5/6 support
 - Compressioned data read
@@ -69,6 +69,21 @@ Currently `btrfs-fuse` has the following features missing:
 Above features are still under active development.
 
 When such missing features is hit, `btrfs-fuse` would return -EOPNOTSUPP.
+
+
+While there are still some other FUSE related feature missing:
+
+- Multi-thread support
+
+  Low priority feature, as bootloader won't really need that feature, and
+  extra concurrency code can confuse new readers.
+
+- Proper subvolume inode address space
+
+  This is due to FUSE limitation, that one FUSE must has the same `stat::st_dev`.
+  In kernel btrfs returns different `stat::st_dev` for different subvolumes,
+  but in FUSE we don't have the ability do the same thing.
+
 
 Usage
 -----

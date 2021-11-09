@@ -259,15 +259,32 @@ pass:
 		nargv[nargc] = argv[i];
 		nargc++;
 	}
-	nargv[nargc] = paras[0];
-	nargc++;
+	if (paras[0]) {
+		nargv[nargc] = paras[0];
+		nargc++;
+	} else {
+		usage();
+	}
 
-	fs_info = btrfs_mount(paras[1]);
-	if (IS_ERR(fs_info)) {
-		error("failed to open btrfs on device %s", paras[1]);
-		btrfs_exit();
+	if (nargc + 1 >= MAX_ARGS) {
+		error("too many args for FUSE, max supported args is %u", MAX_ARGS);
 		return 1;
 	}
-	global_info = fs_info;
+
+	/* Force single thread mode */
+	nargv[nargc] = "-s";
+	nargc++;
+
+	if (paras[1]) {
+		fs_info = btrfs_mount(paras[1]);
+		if (IS_ERR(fs_info)) {
+			error("failed to open btrfs on device %s", paras[1]);
+			btrfs_exit();
+			return 1;
+		}
+		global_info = fs_info;
+	}
+
+	/* Either run FUSE or let FUSE handle "--help" output */
 	return fuse_main(nargc, nargv, &btrfs_fuse_ops, NULL);
 }
