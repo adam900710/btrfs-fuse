@@ -46,4 +46,13 @@ struct btrfs_csum_item *btrfs_lookup_csum(struct btrfs_fs_info *fs_info,
 ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 			size_t num_bytes, u64 logical);
 
+/*
+ * Read data at @file_offset of @inode into @buf.
+ *
+ * @file_offset and @num_bytes must be fs_info->sectorsize aligned.
+ */
+ssize_t btrfs_read_file(struct btrfs_fs_info *fs_info,
+			struct btrfs_inode *inode, u64 file_offset,
+			char *buf, u32 num_bytes);
+
 #endif

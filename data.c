@@ -312,3 +312,117 @@ not_found:
 	btrfs_release_path(path);
 	return 1;
 }
+
+/* Read a file extent specified by @path into @buf. */
+static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
+				struct btrfs_path *path,
+				struct btrfs_inode *inode, u64 file_offset,
+				char *buf, u32 num_bytes)
+{
+	struct btrfs_file_extent_item *fi;
+	struct btrfs_key key;
+	u64 disk_bytenr;
+	u64 nr_bytes;
+	u32 read_bytes;
+	u32 cur_off = 0;
+	u8 type;
+	int ret;
+
+	ASSERT(path->nodes[0]);
+	ASSERT(path->slots[0] < btrfs_header_nritems(path->nodes[0]));
+	ASSERT(IS_ALIGNED(file_offset, fs_info->sectorsize) &&
+		IS_ALIGNED(num_bytes, fs_info->sectorsize));
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+
+	ASSERT(key.objectid == inode->ino && key.type == BTRFS_EXTENT_DATA_KEY);
+	fi = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+	type = btrfs_file_extent_type(path->nodes[0], fi);
+
+	if (btrfs_file_extent_compression(path->nodes[0], fi) !=
+	    BTRFS_COMPRESS_NONE)
+		return -EOPNOTSUPP;
+
+	nr_bytes = btrfs_file_extent_num_bytes(path->nodes[0], fi);
+
+	read_bytes = MIN(key.offset + nr_bytes, file_offset + BTRFS_CACHE_SIZE);
+	read_bytes = MIN(read_bytes, file_offset + num_bytes);
+	read_bytes -= file_offset;
+
+	if (type == BTRFS_FILE_EXTENT_PREALLOC) {
+		memset(buf, 0, read_bytes);
+		return read_bytes;
+	}
+	if (type == BTRFS_FILE_EXTENT_INLINE) {
+		ASSERT(file_offset == 0 && read_bytes <= fs_info->sectorsize);
+		read_extent_buffer(path->nodes[0], buf,
+				btrfs_file_extent_inline_start(fi), read_bytes);
+		return fs_info->sectorsize;
+	}
+
+	/* A hole extent */
+	if (btrfs_file_extent_disk_bytenr(path->nodes[0], fi) == 0) {
+		memset(buf, 0, read_bytes);
+		return read_bytes;
+	}
+
+	/* Regular type */
+	disk_bytenr = btrfs_file_extent_disk_bytenr(path->nodes[0], fi) +
+		      btrfs_file_extent_offset(path->nodes[0], fi) +
+		      file_offset - key.offset;
+	while (cur_off < read_bytes) {
+		ret = btrfs_read_data(fs_info, buf + cur_off, read_bytes - cur_off,
+				      disk_bytenr + cur_off);
+		if (ret < 0)
+			break;
+		cur_off += ret;
+	}
+	if (ret < 0 && cur_off == 0)
+		return ret;
+	return cur_off;
+}
+
+ssize_t btrfs_read_file(struct btrfs_fs_info *fs_info,
+			struct btrfs_inode *inode, u64 file_offset,
+			char *buf, u32 num_bytes)
+{
+	struct btrfs_path path;
+	u32 cur_off = 0;
+	int ret;
+
+	ASSERT(IS_ALIGNED(file_offset, fs_info->sectorsize) &&
+		IS_ALIGNED(num_bytes, fs_info->sectorsize));
+	btrfs_init_path(&path);
+
+	while (cur_off < num_bytes) {
+		u64 next_offset;
+
+		btrfs_release_path(&path);
+		ret = lookup_file_extent(fs_info, &path, inode,
+					 file_offset + cur_off, &next_offset);
+		if (ret < 0)
+			goto out;
+		/* No file extent found, mostly NO_HOLES case */
+		if (ret > 0) {
+			u32 read_bytes;
+
+			read_bytes = MIN(next_offset - file_offset, num_bytes) -
+				     cur_off;
+			memset(buf + cur_off, 0, read_bytes);
+			cur_off += read_bytes;
+			continue;
+		}
+
+		ret = read_file_extent(fs_info, &path, inode,
+				file_offset + cur_off, buf + cur_off,
+				num_bytes - cur_off);
+		if (ret < 0)
+			break;
+		cur_off += ret;
+	}
+out:
+	btrfs_release_path(&path);
+	if (ret < 0 && cur_off == 0)
+		return ret;
+	return cur_off;
+}
