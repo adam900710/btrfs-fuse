@@ -4,7 +4,8 @@ if get_option('buildtype').startswith('debug')
   add_project_arguments('-DDEBUG', language : ['c'])
 endif
 src = ['accessors.c', 'hash.c', 'main.c', 'messages.c', 'metadata.c',
-       'super.c', 'volumes.c', 'inode.c', 'libs/crc32c.c', 'libs/rbtree.c']
+       'super.c', 'volumes.c', 'inode.c', 'data.c',
+       'libs/crc32c.c', 'libs/rbtree.c']
 
 uuid_dep = dependency('uuid')
 blake2_dep = dependency('libb2')
