@@ -79,6 +79,37 @@ static inline bool is_fstree(u64 rootid)
 struct btrfs_root *btrfs_read_root(struct btrfs_fs_info *fs_info, u64 rootid);
 
 /*
+ * Go to next sibling leaf
+ *
+ * Return 0 if next sibling leaf found and update @path.
+ * Return >0 if no more next leaf.
+ * Return <0 for error.
+ */
+int btrfs_next_leaf(struct btrfs_path *path);
+
+/*
+ * This is the equivalent of kernel/progs btrfs_search_slot(), without the CoW
+ * part.
+ *
+ * Return 0 if an exact match is found.
+ * Return <0 if an error occurred.
+ * Return >0 if no exact match is found, and @path will point to the slot where
+ * the new key should be inserted into.
+ *
+ * The >0 behavior has several pitfalls:
+ *
+ * - It may return an unused slot
+ *   This means path->slots[0] >= btrfs_header_nritems(path->nodes[0]).
+ *
+ * - path->slots[0] can be 0 if the tree only has one leaf.
+ *   Otherwise, path->slots[0] will never be zero.
+ *
+ * Thus it's recommened to call btrfs_search_key() and btrfs_search_key_range()
+ * wrappers.
+ */
+int __btrfs_search_slot(struct btrfs_root *root, struct btrfs_path *path,
+			struct btrfs_key *key);
+/*
  * Search a single key to find an exact match
  *
  * Return 0 if an exact match is found and @path will point to the slot.

@@ -219,23 +219,8 @@ static struct extent_buffer *read_node_child(struct extent_buffer *parent,
 			btrfs_header_level(parent) - 1, gen, &first_key);
 }
 
-/*
- * This is the equivalent of kernel/progs btrfs_search_slot(), without the CoW
- * part.
- *
- * Return 0 if a exact match is found.
- * Return <0 if an error occurred.
- * Return >0 if no exact match is found, and @path will point to the slow where
- * the key should be inserted.
- *
- * This means for >0 case, @path may point to an unused slot, which is not very
- * friendly to call.
- *
- * Thus it's recommened to call btrfs_search_key() and btrfs_search_key_range()
- * wrappers.
- */
-static int __search_slot(struct btrfs_root *root, struct btrfs_path *path,
-			 struct btrfs_key *key)
+int __btrfs_search_slot(struct btrfs_root *root, struct btrfs_path *path,
+			struct btrfs_key *key)
 {
 	int level;
 	int ret = 0;
@@ -288,14 +273,7 @@ error:
 	return ret;
 }
 
-/*
- * Go to next sibling leaf
- *
- * Return 0 if next sibling leaf found and update @path.
- * Return >0 if no more sibling leaf.
- * Return <0 for error.
- */
-static int next_leaf(struct btrfs_path *path)
+int btrfs_next_leaf(struct btrfs_path *path)
 {
 	int slot;
 	int level;
@@ -338,7 +316,7 @@ int btrfs_search_key(struct btrfs_root *root, struct btrfs_path *path,
 {
 	int ret;
 
-	ret = __search_slot(root, path, key);
+	ret = __btrfs_search_slot(root, path, key);
 	if (ret > 0)
 		ret = -ENOENT;
 	if (ret < 0)
@@ -374,14 +352,14 @@ int btrfs_search_keys_start(struct btrfs_root *root, struct btrfs_path *path,
 	key.type = range->type_start;
 	key.offset = range->offset_start;
 
-	ret = __search_slot(root, path, &key);
+	ret = __btrfs_search_slot(root, path, &key);
 	/* Either found or error */
 	if (ret <= 0)
 		return ret;
 
 	/* Check if current slot is used first */
 	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-		ret = next_leaf(path);
+		ret = btrfs_next_leaf(path);
 		if (ret > 0)
 			ret = -ENOENT;
 		if (ret < 0) {
@@ -409,7 +387,7 @@ int btrfs_search_keys_next(struct btrfs_path *path,
 
 	path->slots[0]++;
 	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-		ret = next_leaf(path);
+		ret = btrfs_next_leaf(path);
 		if (ret)
 			return ret;
 	}
