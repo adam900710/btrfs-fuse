@@ -5,6 +5,7 @@
 #include "volumes.h"
 #include "messages.h"
 #include "hash.h"
+#include "inode.h"
 #include "data.h"
 
 struct btrfs_csum_item *btrfs_lookup_csum(struct btrfs_fs_info *fs_info,
@@ -212,4 +213,102 @@ ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 	}
 	free(csum_buf);
 	return ret;
+}
+
+/*
+ * Lookup the file extent for file_offset
+ *
+ * Return 0 if we find an file extent which covers @file_offset, and @path
+ * will point to it.
+ *
+ * Return >0 if we can't find an file extent, and @next_file_offset_ret
+ * will be updated to indicate the next file offset where we can find the next
+ * file extent. This behavior can be very handy for NO_HOLES cases to skip
+ * to next non-hole extent.
+ *
+ * Return <0 for error.
+ */
+static int lookup_file_extent(struct btrfs_fs_info *fs_info,
+			      struct btrfs_path *path,
+			      struct btrfs_inode *inode, u64 file_offset,
+			      u64 *next_file_offset_ret)
+{
+	struct btrfs_file_extent_item *fi;
+	struct btrfs_key key;
+	u64 next_offset = (u64)-1;
+	u64 extent_len;
+	u8 type;
+	int ret;
+
+	ASSERT(IS_ALIGNED(file_offset, fs_info->sectorsize));
+	key.objectid = inode->ino;
+	key.type = BTRFS_EXTENT_DATA_KEY;
+	key.offset = file_offset;
+
+	ret = __btrfs_search_slot(inode->root, path, &key);
+	/* Either we fond an exact match or error */
+	if (ret <= 0)
+		return ret;
+
+	/*
+	 * Check btrfs_lookup_csum() for reason why path->slots[0] == 0 case
+	 * means no match at all.
+	 */
+	if (path->slots[0] == 0)
+		goto not_found;
+
+	/* Check if previous item covers @file_offset. */
+	path->slots[0]--;
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+
+	/* Previous item doesn't even belong to this inode, no found */
+	if (key.objectid != inode->ino)
+		goto not_found;
+
+	/*
+	 * Previous item is not an file extent, but belongs to the same inode,
+	 * this means we may be before the first file extent, still need to
+	 * check next item.
+	 */
+	if (key.type != BTRFS_EXTENT_DATA_KEY)
+		goto next_item;
+
+	/* Now we're at previous file extent which belonds to this inode */
+	fi = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+
+	type = btrfs_file_extent_type(path->nodes[0], fi);
+	if (type == BTRFS_FILE_EXTENT_INLINE && key.offset != 0) {
+		error("unexpected inline extent at inode %llu file offset %llu",
+		      inode->ino, key.offset);
+		btrfs_release_path(path);
+		return -EUCLEAN;
+	}
+	if (type == BTRFS_FILE_EXTENT_INLINE)
+		extent_len = fs_info->sectorsize;
+	else
+		extent_len = btrfs_file_extent_num_bytes(path->nodes[0], fi);
+
+	/* The extent covers the range, found */
+	if (key.offset + extent_len > file_offset)
+		return 0;
+
+next_item:
+	/* No found, go next slot to grab next file_offset */
+	path->slots[0]++;
+	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
+		ret = btrfs_next_leaf(path);
+		if (ret)
+			goto not_found;
+	}
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+	if (key.objectid != inode->ino || key.type != BTRFS_EXTENT_DATA_KEY)
+		goto not_found;
+	next_offset = key.offset;
+
+not_found:
+	if (next_file_offset_ret)
+		*next_file_offset_ret = next_offset;
+	btrfs_release_path(path);
+	return 1;
 }
