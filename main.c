@@ -9,6 +9,7 @@
 #include "messages.h"
 #include "super.h"
 #include "inode.h"
+#include "data.h"
 
 static struct btrfs_fs_info *global_info = NULL;
 
@@ -90,13 +91,21 @@ static int btrfs_fuse_read(const char *path, char *output, size_t size,
 	struct btrfs_inode inode = {};
 	int ret;
 
+	if (!IS_ALIGNED(offset, fs_info->sectorsize) ||
+	    !IS_ALIGNED(size, fs_info->sectorsize)) {
+		error("unaligned read range, size=%lu offset=%lu path=%s",
+			size, offset, path);
+		return -EINVAL;
+	}
+
 	ret = btrfs_resolve_path(fs_info, path, strlen(path), &inode);
 	if (ret < 0)
 		return ret;
 
 	if (inode.file_type == BTRFS_FT_DIR)
 		return -EISDIR;
-	return -EOPNOTSUPP;
+
+	return btrfs_read_file(fs_info, &inode, offset, output, size);
 }
 
 static int btrfs_fuse_release(const char *path, struct fuse_file_info *fi)
