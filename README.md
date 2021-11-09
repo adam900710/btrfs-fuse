@@ -57,21 +57,40 @@ This project has the following dependency:
 
   For XXHASH checksum support
 
+Limitation
+----------
+
+Currently `btrfs-fuse` has the following features missing:
+
+- RAID5/6 support
+- Compressioned data read
+- xattr/fattr support
+
+Above features are still under active development.
+
+When such missing features is hit, `btrfs-fuse` would return -EOPNOTSUPP.
+
 Usage
 -----
 
-For now, the generated binary `btrfs-fuse` only does selftest for
-`btrfs_mount()` function to make sure the bootstrap and metadata reading is
-working.
+```
+$ btrfs-fuse [<fuse options>] <device> [<extra devs> ...] <mnt>
+```
 
-Example:
+Please note that, if multiple devices are passed into `btrfs-fuse` and contains
+different file systems, `btrfs-fuse` will use the last device to initialize the
+mount.
+
+That's to say, for the following example:
 
 ```
-# mkfs.btrfs /dev/test/test
-$ ./build/btrfs-fuse /dev/test/test
-INFO: btrfs-fuse test for bootstrap on /dev/test/test
-INFO: test ran fine for /dev/test/test
+$ mkfs.btrfs -f /dev/test/scratch1
+$ mkfs.btrfs -f /dev/test/scratch2
+$ btrfs-fuse /dev/test/scratch1 /dev/test/scratch2 /tmp/mount
 ```
+
+Then only btrfs on `/dev/test/scratch2` will be mounted onto `/tmp/mount`.
+
 
 License
 -------
