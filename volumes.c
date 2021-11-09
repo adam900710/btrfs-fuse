@@ -5,12 +5,12 @@
 #include <unistd.h>
 #include <linux/limits.h>
 #include <uuid.h>
-#include <btrfs/kerncompat.h>
 /*
  * For basic MIN()/MAX(), but it's not as good as kernel min()/max(),
  * thus we shouldn't use anything like MIN(x++,y).
  */
 #include <sys/param.h>
+#include "compat.h"
 #include "volumes.h"
 #include "super.h"
 #include "messages.h"

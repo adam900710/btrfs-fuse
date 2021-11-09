@@ -3,7 +3,7 @@
 #ifndef BTRFS_FUSE_VOLUMES_H
 #define BTRFS_FUSE_VOLUMES_H
 
-#include <btrfs/kerncompat.h>
+#include "compat.h"
 #include "libs/list.h"
 #include "libs/rbtree.h"
 #include "ondisk_format.h"

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include <stdlib.h>
 #include "metadata.h"
 #include "volumes.h"
 #include "messages.h"

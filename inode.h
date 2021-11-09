@@ -3,9 +3,9 @@
 #ifndef BTRFS_FUSE_INODE_H
 #define BTRFS_FUSE_INODE_H
 
-#include <btrfs/kerncompat.h>
 #include <asm-generic/types.h>
 #include <sys/stat.h>
+#include "compat.h"
 #include "ondisk_format.h"
 #include "ctree.h"
 #include "metadata.h"

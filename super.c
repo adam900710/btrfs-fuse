@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 #include <unistd.h>
-#include <errno.h>
 #include <uuid.h>
 #include <sys/stat.h>
 #include <fcntl.h>

@@ -9,7 +9,6 @@
  *
  */
 
-#include <btrfs/kerncompat.h>
 #include <inttypes.h>
 #include <string.h>
 #include <unistd.h>

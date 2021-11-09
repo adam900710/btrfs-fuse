@@ -4,9 +4,7 @@
 #define BTRFS_FUSE_ONDISK_FORMAT_H
 
 #include <assert.h>
-#include <asm-generic/types.h>
-#include <btrfs/kerncompat.h>
-
+#include "compat.h"
 
 /*
  * Supported sectorsize range in theory.
