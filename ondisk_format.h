@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <asm-generic/types.h>
 #include <btrfs/kerncompat.h>
-#include <btrfs/sizes.h>
 
 
 /*
@@ -19,8 +18,8 @@
  * (Since v5.14 btrfs has experimental support for 4K sectorsize with 64K page
  *  size)
  */
-#define BTRFS_SECTORSIZE_MIN	SZ_4K
-#define BTRFS_SECTORSIZE_MAX	SZ_64K
+#define BTRFS_SECTORSIZE_MIN	4096
+#define BTRFS_SECTORSIZE_MAX	65536
 
 /* Maximum filename length (without the tailing '\0') */
 #define BTRFS_NAME_LEN		255
@@ -33,8 +32,8 @@
  * All supported nodesize must be power of 2.
  * Kernel only supports nodesize >= sectorsize.
  */
-#define BTRFS_NODESIZE_MIN	SZ_4K
-#define BTRFS_NODESIZE_MAX	SZ_64K	
+#define BTRFS_NODESIZE_MIN	4096
+#define BTRFS_NODESIZE_MAX	65536
 
 /*
  * The maximum checksum size in bytes, not all checksum algorithms use all
@@ -54,9 +53,9 @@ enum btrfs_csum_type {
 };
 
 /* Location of btrfs super blocks, here we only care the primary superblock */
-#define BTRFS_SUPER_INFO_OFFSET SZ_64K
+#define BTRFS_SUPER_INFO_OFFSET 65536
 
-#define BTRFS_SUPER_INFO_SIZE SZ_4K
+#define BTRFS_SUPER_INFO_SIZE 	4096
 
 #define BTRFS_MAGIC 0x4D5F53665248425FULL /* ascii _BHRfS_M, no null */
 
@@ -122,7 +121,7 @@ struct btrfs_dev_item {
 	__u8 fsid[BTRFS_UUID_SIZE];
 } __attribute__ ((__packed__));
 
-#define BTRFS_SYSTEM_CHUNK_ARRAY_SIZE SZ_2K
+#define BTRFS_SYSTEM_CHUNK_ARRAY_SIZE	2048
 
 #define BTRFS_LABEL_SIZE 256
 

@@ -117,7 +117,7 @@ static u32 check_data_csum(struct btrfs_fs_info *fs_info,
 }
 
 /* The maximum size that we read from disk for one batch. */
-#define	BTRFS_CACHE_SIZE	(SZ_128K)
+#define	BTRFS_CACHE_SIZE	(128 * 1024)
 
 ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 			size_t num_bytes, u64 logical)

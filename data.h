@@ -37,11 +37,11 @@ struct btrfs_csum_item *btrfs_lookup_csum(struct btrfs_fs_info *fs_info,
  *
  * Where X means corrupted data.
  *
- * Then we call btrfs_read_data(fs_info, buf, SZ_8K, X);
+ * Then we call btrfs_read_data(fs_info, buf, 8192, X);
  *
- * We will get the return value SZ_4K, with correct data from mirror 2,
- * then we still need to call btrfs_read_data(fs_info, buf + SZ_4K, SZ_4K,
- * X + SZ_4K) to read the next 4K correctly from mirror 1.
+ * We will get the return value 4096, with correct data from mirror 2,
+ * then we still need to call btrfs_read_data(fs_info, buf + 4096, 4096,
+ * X + 4096) to read the next 4K correctly from mirror 1.
  */
 ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 			size_t num_bytes, u64 logical);
