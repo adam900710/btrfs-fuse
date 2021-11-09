@@ -605,6 +605,9 @@ struct btrfs_file_extent_item {
 
 } __attribute__ ((__packed__));
 
+/* Max uncompressed size for compressed extent */
+#define BTRFS_MAX_COMPRESSED		(128 * 1024)
+
 /*
  * Describe data checksum.
  *
