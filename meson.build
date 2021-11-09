@@ -24,4 +24,4 @@ compression_deps = [zlib_dep, lzo_dep, zstd_dep]
 fuse_dep = dependency('fuse3')
 
 deps = [uuid_dep, hash_deps, compression_deps, fuse_dep]
-executable('btrfs-fuse', src, dependencies: deps)
+executable('btrfs-fuse', src, dependencies: deps, install: true)
