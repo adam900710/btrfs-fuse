@@ -343,6 +343,15 @@ static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
 	    BTRFS_COMPRESS_NONE)
 		return -EOPNOTSUPP;
 
+	if (type == BTRFS_FILE_EXTENT_INLINE) {
+		read_bytes = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
+		ASSERT(file_offset == 0 && read_bytes <= fs_info->sectorsize);
+		read_extent_buffer(path->nodes[0], buf,
+				btrfs_file_extent_inline_start(fi), read_bytes);
+		memset(buf + read_bytes, 0, fs_info->sectorsize - read_bytes);
+		return fs_info->sectorsize;
+	}
+
 	nr_bytes = btrfs_file_extent_num_bytes(path->nodes[0], fi);
 
 	read_bytes = MIN(key.offset + nr_bytes, file_offset + BTRFS_CACHE_SIZE);
@@ -353,13 +362,6 @@ static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
 		memset(buf, 0, read_bytes);
 		return read_bytes;
 	}
-	if (type == BTRFS_FILE_EXTENT_INLINE) {
-		ASSERT(file_offset == 0 && read_bytes <= fs_info->sectorsize);
-		read_extent_buffer(path->nodes[0], buf,
-				btrfs_file_extent_inline_start(fi), read_bytes);
-		return fs_info->sectorsize;
-	}
-
 	/* A hole extent */
 	if (btrfs_file_extent_disk_bytenr(path->nodes[0], fi) == 0) {
 		memset(buf, 0, read_bytes);
