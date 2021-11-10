@@ -57,13 +57,29 @@ This project has the following dependency:
 
   For XXHASH checksum support
 
+- zlib
+
+  For zlib decompression support
+
+- lzo2
+
+  For lzo decompression support
+
+- libzstd
+
+  For zstd decompression support
+
+- fuse3
+
+  For FUSE interface.
+
+
 Limitation
 ----------
 
 Currently `btrfs-fuse` has the following btrfs features missing:
 
 - RAID5/6 support
-- Compressioned data read
 - xattr/fattr support
 
 Above features are still under active development.

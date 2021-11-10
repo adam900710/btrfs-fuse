@@ -505,6 +505,16 @@ static inline u32 btrfs_file_extent_calc_inline_size(u32 datasize)
 	return offsetof(struct btrfs_file_extent_item, disk_bytenr) + datasize;
 }
 
+#define BTRFS_FILE_EXTENT_INLINE_DATA_START	\
+	(offsetof(struct btrfs_file_extent_item, disk_bytenr))
+
+static inline u32
+btrfs_file_extent_inline_item_len(const struct extent_buffer *eb,
+				  struct btrfs_item *e)
+{
+	return btrfs_item_size(eb, e) - BTRFS_FILE_EXTENT_INLINE_DATA_START;
+}
+
 BTRFS_GET_FUNCS(file_extent_disk_bytenr, struct btrfs_file_extent_item,
 		disk_bytenr, 64);
 BTRFS_GET_FUNCS(file_extent_generation, struct btrfs_file_extent_item,

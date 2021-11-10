@@ -7,6 +7,7 @@
 #include "hash.h"
 #include "inode.h"
 #include "data.h"
+#include "compression.h"
 
 struct btrfs_csum_item *btrfs_lookup_csum(struct btrfs_fs_info *fs_info,
 					  struct btrfs_path *path,
@@ -313,6 +314,111 @@ not_found:
 	return 1;
 }
 
+static ssize_t read_compressed_inline(struct btrfs_fs_info *fs_info,
+				      struct btrfs_path *path,
+				      struct btrfs_file_extent_item *fi,
+				      char *buf)
+{
+	u32 csize = btrfs_file_extent_inline_item_len(path->nodes[0],
+						btrfs_item_nr(path->slots[0]));
+	u32 dsize = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
+	u8 compression = btrfs_file_extent_type(path->nodes[0], fi);
+	char *cbuf;
+	int ret;
+
+	ASSERT(dsize <= fs_info->sectorsize);
+
+	cbuf = malloc(csize);
+	if (!cbuf)
+		return -ENOMEM;
+
+	read_extent_buffer(path->nodes[0], cbuf,
+			   btrfs_file_extent_inline_start(fi), csize);
+
+	ret = btrfs_decompress(fs_info, cbuf, csize, buf,
+			       dsize, compression);
+	memset(buf + dsize, 0, fs_info->sectorsize - dsize);
+	if (ret < 0)
+		return ret;
+	return fs_info->sectorsize;
+}
+
+static ssize_t read_compressed_file_extent(struct btrfs_fs_info *fs_info,
+					   struct btrfs_path *path,
+					   struct btrfs_inode *inode,
+					   u64 file_offset, char *buf,
+					   u32 num_bytes)
+{
+	struct btrfs_file_extent_item *fi;
+	struct btrfs_key key;
+	char *cbuf;	/* Compressed data buffer */
+	char *dbuf;	/* Uncompressed data buffer */
+	u64 csize;	/* Compressed data size */
+	u64 dsize;	/* Uncompressed data size */
+	u64 disk_bytenr;
+	u64 fi_offset;
+	u64 fi_num_bytes;
+	u32 cur_off = 0;
+	u8 compress;
+	u8 type;
+	int ret;
+
+	fi = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+	type = btrfs_file_extent_type(path->nodes[0], fi);
+	compress = btrfs_file_extent_compression(path->nodes[0], fi);
+
+	/* Prealloc is never compressed */
+	ASSERT(type == BTRFS_FILE_EXTENT_INLINE ||
+	       type == BTRFS_FILE_EXTENT_REG);
+
+	if (type == BTRFS_FILE_EXTENT_INLINE) {
+		ASSERT(file_offset == 0);
+		return read_compressed_inline(fs_info, path, fi, buf);
+	}
+
+	/* Regular compressed extent */
+	csize = btrfs_file_extent_disk_num_bytes(path->nodes[0], fi);
+	dsize = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
+	disk_bytenr = btrfs_file_extent_disk_bytenr(path->nodes[0], fi);
+
+	/* No hole extent should be compressed */
+	ASSERT(disk_bytenr);
+
+	cbuf = malloc(csize);
+	dbuf = malloc(dsize);
+	if (!cbuf || !dbuf) {
+		free(dbuf);
+		free(cbuf);
+		return -ENOMEM;
+	}
+
+	/* Read compressed data */
+	while (cur_off < csize) {
+		ret = btrfs_read_data(fs_info, cbuf + cur_off, csize - cur_off,
+				      disk_bytenr + cur_off);
+		if (ret < 0)
+			goto out;
+		cur_off += ret;
+	}
+
+	ret = btrfs_decompress(fs_info, cbuf, csize, dbuf, dsize, compress);
+	if (ret < 0)
+		goto out;
+
+	/* Now copy the part the file extent item refers to */
+	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+	fi_offset = btrfs_file_extent_offset(path->nodes[0], fi);
+	fi_num_bytes = btrfs_file_extent_num_bytes(path->nodes[0], fi);
+	ret = MIN(file_offset + num_bytes, key.offset + fi_num_bytes) - file_offset;
+	memcpy(buf, dbuf + (file_offset - key.offset + fi_offset), ret);
+
+out:
+	free(cbuf);
+	free(dbuf);
+	return ret;
+}
+
 /* Read a file extent specified by @path into @buf. */
 static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
 				struct btrfs_path *path,
@@ -341,7 +447,8 @@ static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
 
 	if (btrfs_file_extent_compression(path->nodes[0], fi) !=
 	    BTRFS_COMPRESS_NONE)
-		return -EOPNOTSUPP;
+		return read_compressed_file_extent(fs_info, path, inode,
+						   file_offset, buf, num_bytes);
 
 	if (type == BTRFS_FILE_EXTENT_INLINE) {
 		read_bytes = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
