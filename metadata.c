@@ -8,15 +8,19 @@
 
 void free_extent_buffer(struct extent_buffer *eb)
 {
+	struct btrfs_fs_info *fs_info;
 	if (!eb)
 		return;
 	ASSERT(eb->refs > 0);
 
+	fs_info = eb->fs_info;
+	pthread_mutex_lock(&fs_info->eb_lock);
 	eb->refs--;
 	if (eb->refs == 0) {
 		rb_erase(&eb->node, &eb->fs_info->eb_root);
 		free(eb);
 	}
+	pthread_mutex_unlock(&fs_info->eb_lock);
 }
 
 
@@ -85,6 +89,7 @@ struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 	int max_mirror;
 	int ret = 0;
 
+	pthread_mutex_lock(&fs_info->eb_lock);
 	while (*p) {
 		parent = *p;
 		eb = rb_entry(parent, struct extent_buffer, node);
@@ -98,21 +103,28 @@ struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 			 * it in case of bad level/transid/first_key.
 			 */
 			ret = verify_tree_block(eb, level, transid, first_key);
-			if (ret < 0)
+			if (ret < 0) {
+				pthread_mutex_unlock(&fs_info->eb_lock);
 				return ERR_PTR(ret);
+			}
 
 			eb->refs++;
+			pthread_mutex_unlock(&fs_info->eb_lock);
 			return eb;
 		}
 	}
 
 	max_mirror = btrfs_num_copies(fs_info, logical);
-	if (max_mirror < 0)
+	if (max_mirror < 0) {
+		pthread_mutex_unlock(&fs_info->eb_lock);
 		return ERR_PTR(max_mirror);
+	}
 
 	eb = calloc(1, sizeof(*eb) + fs_info->nodesize);
-	if (!eb)
+	if (!eb) {
+		pthread_mutex_unlock(&fs_info->eb_lock);
 		return ERR_PTR(-ENOMEM);
+	}
 	eb->start = logical;
 	eb->len = fs_info->nodesize;
 	eb->refs = 0;
@@ -137,10 +149,12 @@ struct extent_buffer *btrfs_read_tree_block(struct btrfs_fs_info *fs_info,
 		eb->refs++;
 		rb_link_node(&eb->node, parent, p);
 		rb_insert_color(&eb->node, &fs_info->eb_root);
+		pthread_mutex_unlock(&fs_info->eb_lock);
 		return eb;
 	}
 
 	free(eb);
+	pthread_mutex_unlock(&fs_info->eb_lock);
 	return ERR_PTR(-EIO);
 }
 

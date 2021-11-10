@@ -271,10 +271,6 @@ pass:
 		return 1;
 	}
 
-	/* Force single thread mode */
-	nargv[nargc] = "-s";
-	nargc++;
-
 	if (paras[1]) {
 		fs_info = btrfs_mount(paras[1]);
 		if (IS_ERR(fs_info)) {

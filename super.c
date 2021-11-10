@@ -273,6 +273,7 @@ struct btrfs_fs_info *btrfs_mount(const char *path)
 	if (!fs_info)
 		return ERR_PTR(-ENOMEM);
 
+	pthread_mutex_init(&fs_info->eb_lock, NULL);
 	/* Check if there is btrfs on the device */
 	ret = btrfs_scan_device(path, &fs_info->super_copy);
 	if (ret < 0) {

@@ -3,6 +3,7 @@
 #ifndef BTRFS_FUSE_CTREE_H
 #define BTRFS_FUSE_CTREE_H
 
+#include <pthread.h>
 #include "accessors.h"
 #include "libs/rbtree.h"
 #include "libs/list.h"
@@ -40,6 +41,7 @@ struct btrfs_fs_info {
 
 	/* Recrods all extent_buffers */
 	struct rb_root eb_root;
+	pthread_mutex_t eb_lock;
 
 	/* Cached generation, the same as superblock::generation */
 	u64 generation;

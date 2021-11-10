@@ -47,7 +47,9 @@ static inline int btrfs_comp_cpu_keys(const struct btrfs_key *key1,
 
 static inline struct extent_buffer *extent_buffer_get(struct extent_buffer *eb)
 {
+	pthread_mutex_lock(&eb->fs_info->eb_lock);
 	eb->refs++;
+	pthread_mutex_unlock(&eb->fs_info->eb_lock);
 	return eb;
 }
 
