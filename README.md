@@ -89,11 +89,6 @@ When such missing features is hit, `btrfs-fuse` would return -EOPNOTSUPP.
 
 While there are still some other FUSE related feature missing:
 
-- Multi-thread support
-
-  Low priority feature, as bootloader won't really need that feature, and
-  extra concurrency code can confuse new readers.
-
 - Proper subvolume inode address space
 
   This is due to FUSE limitation, that one FUSE must has the same `stat::st_dev`.
