@@ -93,7 +93,7 @@ static int btrfs_fuse_read(const char *path, char *output, size_t size,
 
 	if (!IS_ALIGNED(offset, fs_info->sectorsize) ||
 	    !IS_ALIGNED(size, fs_info->sectorsize)) {
-		error("unaligned read range, size=%lu offset=%lu path=%s",
+		error("unaligned read range, size=%zu offset=%tu path=%s",
 			size, offset, path);
 		return -EINVAL;
 	}

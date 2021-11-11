@@ -353,7 +353,7 @@ int btrfs_read_sys_chunk_array(struct btrfs_fs_info *fs_info)
 		if (sys_chunk_size - cur < sizeof(struct btrfs_disk_key) +
 		    btrfs_chunk_item_size(1)) {
 			error(
-		"invalid sys_chunk_size, has %u bytes left expected minimal %lu",
+		"invalid sys_chunk_size, has %u bytes left expected minimal %zu",
 				sys_chunk_size - cur,
 				sizeof(struct btrfs_disk_key) +
 				btrfs_chunk_item_size(1));
