@@ -225,7 +225,7 @@ struct btrfs_super_block {
 	u8 __unused5[1237];
 } __attribute__ ((__packed__));
 
-static_assert(sizeof(struct btrfs_super_block) == BTRFS_SUPER_INFO_SIZE);
+static_assert(sizeof(struct btrfs_super_block) == BTRFS_SUPER_INFO_SIZE, "Superblock size mismatch!");
 
 /*
  * Btrfs metadata blocks has two different types:
