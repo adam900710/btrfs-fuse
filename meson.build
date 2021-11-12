@@ -7,6 +7,8 @@ src = ['accessors.c', 'hash.c', 'main.c', 'messages.c', 'metadata.c',
        'super.c', 'volumes.c', 'inode.c', 'data.c', 'compression.c',
        'libs/crc32c.c', 'libs/rbtree.c']
 
+cc = meson.get_compiler('c')
+
 uuid_dep = dependency('uuid')
 
 # Hash dependency
@@ -17,7 +19,8 @@ hash_deps = [blake2_dep, crypto_dep, xxhash_dep]
 
 # Compression dependency
 zlib_dep = dependency('zlib')
-lzo_dep = dependency('lzo2')
+# not using pkgconfig for lzo as older versions do not ship a definition
+lzo_dep = cc.find_library('lzo2', has_headers: ['lzo/lzo2a.h'])
 zstd_dep = dependency('libzstd')
 compression_deps = [zlib_dep, lzo_dep, zstd_dep]
 
