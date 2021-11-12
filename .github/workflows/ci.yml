@@ -1,0 +1,20 @@
+name: Continuous Integration
+on:
+  push:
+    branches: [master]
+  pull_request:
+jobs:
+  build:
+    name: Build btrfs-fuse
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run: sudo apt-get install -y pkg-config meson gcc libb2-dev libfuse3-dev liblzo2-dev libssl-dev libxxhash-dev libzstd-dev uuid-dev zlib1g-dev
+    - name: Configure
+      run: meson build
+    - name: Build
+      run: ninja -C build
+    - name: Smoketest
+      run: ./build/btrfs-fuse --help
