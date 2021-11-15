@@ -210,6 +210,11 @@ ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 		if (bytes_csum_ok > 0) {
 			ret = bytes_csum_ok;
 			break;
+		} else {
+			warning(
+			"checksum mismatch for logical bytenr %llu mirror %d",
+				logical, mirror_nr);
+			ret = -EIO;
 		}
 	}
 	free(csum_buf);
