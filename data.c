@@ -59,7 +59,7 @@ struct btrfs_csum_item *btrfs_lookup_csum(struct btrfs_fs_info *fs_info,
 	 * Current item doesn't cover our bytenr, step forward to next item so
 	 * caller can know where next csum starts.
 	 */
-	if (key.offset + item_size / fs_info->csum_size * fs_info->sectorsize >=
+	if (key.offset + item_size / fs_info->csum_size * fs_info->sectorsize <=
 	    bytenr) {
 		path->slots[0]++;
 		if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
