@@ -34,10 +34,11 @@ static int simple_stripe_read(struct btrfs_fs_info *fs_info,
 			      struct btrfs_chunk_map *map, char *buf, size_t size,
 			      u64 logical, int mirror_nr);
 
-/* Place holder for unsupported profiles */
-static int unsupported_read(struct btrfs_fs_info *fs_info,
-			    struct btrfs_chunk_map *map, char *buf, size_t size,
-			    u64 logical, int mirror_num);
+/* For RAID5/6 */
+static int raid56_read(struct btrfs_fs_info *fs_info,
+		       struct btrfs_chunk_map *map, char *buf, size_t size,
+		       u64 logical, int mirror_nr);
+
 const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	[BTRFS_RAID_SINGLE] = {
 		.max_mirror = 1,
@@ -61,11 +62,11 @@ const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	},
 	[BTRFS_RAID_RAID5] = {
 		.max_mirror = 2,
-		.read_func = unsupported_read,
+		.read_func = raid56_read,
 	},
 	[BTRFS_RAID_RAID6] = {
 		.max_mirror = 3,
-		.read_func = unsupported_read,
+		.read_func = raid56_read,
 	},
 	[BTRFS_RAID_RAID1C3] = {
 		.max_mirror = 3,
@@ -569,11 +570,46 @@ static int simple_stripe_read(struct btrfs_fs_info *fs_info,
 	return ret;
 }
 
-static int unsupported_read(struct btrfs_fs_info *fs_info,
-			    struct btrfs_chunk_map *map, char *buf, size_t size,
-			    u64 logical, int mirror_num)
+static int raid56_read(struct btrfs_fs_info *fs_info,
+		       struct btrfs_chunk_map *map, char *buf, size_t size,
+		       u64 logical, int mirror_nr)
 {
-	return -ENOTSUP;
+	const u64 offset = logical - map->logical;
+	const u64 stripe_len = map->stripe_len;
+	const u16 num_stripes = map->num_stripes;
+	const u16 data_stripes = (map->flags & BTRFS_BLOCK_GROUP_RAID5) ?
+				num_stripes - 1 : num_stripes - 2;
+	/* How many full stripes needs to be skipped */
+	const u32 full_stripe_nr = offset / (data_stripes * stripe_len);
+	/* Btrfs RAID56 rotate right */
+	const int rot = full_stripe_nr % num_stripes;
+	struct btrfs_io_stripe *stripe;
+	u32 read_len;
+	u16 stripe_index;
+
+	/* min(data stripe end, read range end) - logical */
+	read_len = MIN(round_down(offset, stripe_len) + stripe_len + map->logical,
+		       logical + size) - logical;
+
+	/* First get the index as if there is no rotation */
+	stripe_index = (offset - full_stripe_nr * (data_stripes * stripe_len)) /
+			stripe_len;
+	/* Then add the rotation value */
+	stripe_index = (stripe_index + rot) % num_stripes;
+	stripe = &map->stripes[stripe_index];
+
+	/* Direct read from data stripes */
+	if (mirror_nr <= 1 && stripe->dev->fd) {
+		u64 physical = stripe->physical +
+			       full_stripe_nr * BTRFS_STRIPE_LEN +
+			       offset % BTRFS_STRIPE_LEN;
+
+		return btrfs_read_from_disk(stripe->dev->fd, buf, physical,
+					    read_len);
+	}
+
+	/* Has to rebuild the data stripe, not supported yet */
+	return -EOPNOTSUPP;
 }
 
 static struct btrfs_chunk_map *lookup_chunk_map(struct btrfs_fs_info *fs_info,
