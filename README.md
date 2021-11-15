@@ -79,7 +79,6 @@ Limitation
 
 Currently `btrfs-fuse` has the following btrfs features missing:
 
-- RAID5/6 support
 - xattr/fattr support
 
 Above features are still under active development.
@@ -148,3 +147,17 @@ Those external libs include:
 
   Cross-ported from btrfs-progs, which is cross-ported from kernel, and under
   GPL-2.0+ license.
+
+- raid56.[ch] and tables.c
+
+  For RAID56 rebuild.
+
+  Cross-ported from btrfs-progs, which is cross-ported from kernel, and under
+  GPL-2.0-only license.
+
+For projects which want to have btrfs read-only support, and already has a
+FUSE-like interface (like GRUB), those files should not be cross-ported to the
+project if above licenses are not compatible with the target project.
+
+Instead either use wrappers around the interfaces provided by the target
+project, or start from scratch and follow the license of the target project.

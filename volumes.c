@@ -16,6 +16,7 @@
 #include "messages.h"
 #include "metadata.h"
 #include "ctree.h"
+#include "libs/raid56.h"
 
 /*
  * This is for SINGLE/DUP/RAID1C*, which is purely mirror based.
@@ -79,6 +80,64 @@ const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 };
 
 static LIST_HEAD(global_fs_list);
+
+/* Helper structure for raid56 rebuild */
+struct raid56_rebuild_ctrl {
+	/* Logical bytenr of the full stripe */
+	u64 full_stripe_start;
+	u64 chunk_flags;
+	u16 num_stripes;
+	u16 data_stripes;
+
+	/*
+	 * >=0 to indicate which stripe is corrupted, while -1 means
+	 * not corrupted (e.g. for RAID5, bad_index[1] should always be -1).
+	 */
+	int bad_index[2];
+
+	/*
+	 * data[0] is the first data stripe of the full stripe.
+	 * data[data_stripes - 1] is the last data stripe of the full stripe.
+	 * data[data_stripes] is the P parity.
+	 * data[data_stripes + 1] is the Q parity (only for RAID6).
+	 */
+	void *data[];
+};
+
+static size_t raid56_rebuild_ctrl_size(u16 num_stripes)
+{
+	return sizeof(struct raid56_rebuild_ctrl) +
+	       sizeof(char *) * num_stripes;
+}
+
+static void free_raid56_rebuild_ctrl(struct raid56_rebuild_ctrl *ctrl)
+{
+	int i;
+
+	for (i = 0; i < ctrl->num_stripes; i++)
+		free(ctrl->data[i]);
+	free(ctrl);
+}
+static struct raid56_rebuild_ctrl *alloc_raid56_rebuild_ctrl(u16 num_stripes)
+{
+	struct raid56_rebuild_ctrl *ret;
+	int i;
+
+	ret = calloc(1, raid56_rebuild_ctrl_size(num_stripes));
+	if (!ret)
+		return NULL;
+
+	ret->num_stripes = num_stripes;
+	for (i = 0; i < num_stripes; i++) {
+		ret->data[i] = calloc(1, BTRFS_STRIPE_LEN);
+		if (!ret->data[i])
+			goto error;
+	}
+	return ret;
+error:
+	free_raid56_rebuild_ctrl(ret);
+	return NULL;
+}
 
 static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 					      const u8 *dev_uuid, u64 devid)
@@ -574,42 +633,127 @@ static int raid56_read(struct btrfs_fs_info *fs_info,
 		       struct btrfs_chunk_map *map, char *buf, size_t size,
 		       u64 logical, int mirror_nr)
 {
+	struct raid56_rebuild_ctrl *ctrl;
 	const u64 offset = logical - map->logical;
 	const u64 stripe_len = map->stripe_len;
 	const u16 num_stripes = map->num_stripes;
 	const u16 data_stripes = (map->flags & BTRFS_BLOCK_GROUP_RAID5) ?
 				num_stripes - 1 : num_stripes - 2;
+	const u16 nr_tolerated = (map->flags & BTRFS_BLOCK_GROUP_RAID5) ?
+				 1 : 2;
 	/* How many full stripes needs to be skipped */
 	const u32 full_stripe_nr = offset / (data_stripes * stripe_len);
 	/* Btrfs RAID56 rotate right */
 	const int rot = full_stripe_nr % num_stripes;
 	struct btrfs_io_stripe *stripe;
+	u64 physical;
 	u32 read_len;
+	u16 raw_stripe_index;
 	u16 stripe_index;
+	u16 nr_failed = 1;
+	int ret;
+	int i;
 
 	/* min(data stripe end, read range end) - logical */
 	read_len = MIN(round_down(offset, stripe_len) + stripe_len + map->logical,
 		       logical + size) - logical;
 
 	/* First get the index as if there is no rotation */
-	stripe_index = (offset - full_stripe_nr * (data_stripes * stripe_len)) /
-			stripe_len;
+	raw_stripe_index = (offset - full_stripe_nr * (data_stripes * stripe_len)) /
+			    stripe_len;
 	/* Then add the rotation value */
-	stripe_index = (stripe_index + rot) % num_stripes;
+	stripe_index = (raw_stripe_index + rot) % num_stripes;
 	stripe = &map->stripes[stripe_index];
 
 	/* Direct read from data stripes */
 	if (mirror_nr <= 1 && stripe->dev->fd) {
-		u64 physical = stripe->physical +
-			       full_stripe_nr * BTRFS_STRIPE_LEN +
-			       offset % BTRFS_STRIPE_LEN;
+		physical = stripe->physical +
+			   full_stripe_nr * BTRFS_STRIPE_LEN +
+			   offset % BTRFS_STRIPE_LEN;
 
 		return btrfs_read_from_disk(stripe->dev->fd, buf, physical,
 					    read_len);
 	}
 
-	/* Has to rebuild the data stripe, not supported yet */
-	return -EOPNOTSUPP;
+	/* Has to rebuild the data stripe */
+	ctrl = alloc_raid56_rebuild_ctrl(num_stripes);
+	if (!ctrl)
+		return -ENOMEM;
+
+	ctrl->num_stripes = num_stripes;
+	ctrl->data_stripes = data_stripes;
+	ctrl->chunk_flags = map->flags;
+	ctrl->full_stripe_start = full_stripe_nr * data_stripes * stripe_len +
+				  map->logical;
+	/*
+	 * The rebuild contrl doesn't take rotation into consideration.
+	 * And since we're here, we already tried and failed to read using
+	 * mirror 1, thus the raw_stripe_index must point to the corrupted
+	 * data stripe.
+	 */
+	ctrl->bad_index[0] = raw_stripe_index;
+
+	/* This will be determined later */
+	ctrl->bad_index[1] = -1;
+
+	/* Now read all stripes */
+	for (i = 0; i < num_stripes; i++) {
+		stripe_index = (i + rot) % num_stripes;
+		stripe = &map->stripes[stripe_index];
+		physical = stripe->physical + full_stripe_nr * BTRFS_STRIPE_LEN;
+
+		if (stripe->dev->fd > 0) {
+			ret = btrfs_read_from_disk(stripe->dev->fd,
+						   ctrl->data[i], physical,
+						   BTRFS_STRIPE_LEN);
+			if (ret == BTRFS_STRIPE_LEN)
+				continue;
+			/* Read failure falls through */
+		}
+
+		/* Known corrupted position, no need to update the count */
+		if (stripe_index == (raw_stripe_index + rot) % num_stripes)
+			continue;
+
+		nr_failed++;
+		if (nr_failed > nr_tolerated)
+			break;
+		ctrl->bad_index[nr_failed - 1] = i;
+	}
+	if (nr_failed > nr_tolerated) {
+		error(
+	"not enough stripes to rebuild full stripe %llu, failed %u tolerance %u",
+		      ctrl->full_stripe_start, nr_failed, nr_tolerated);
+		ret = -EIO;
+		goto out;
+	}
+
+	/*
+	 * TODO: We have no way to tell RAID6 how to exhaust all combinations to
+	 * recover data stripes.
+	 * This means, if we have two data stripes corrupted, but no device
+	 * missing, we will just try to rebuild current stripe using parity.
+	 *
+	 * Even btrfs kernel implementation has this problem, it's not really
+	 * any better than dm/md RAID56 recovery.
+	 *
+	 * In theory we can expand mirror_nr for RAID6 to try all combinations.
+	 */
+	ret = raid56_recov(num_stripes, BTRFS_STRIPE_LEN, map->flags,
+			   ctrl->bad_index[0], ctrl->bad_index[1],
+			   ctrl->data);
+	if (ret > 0)
+		ret = -EIO;
+	if (ret < 0)
+		goto out;
+
+	/* Finally copy the recovered data back to buffer */
+	memcpy(buf, ctrl->data[raw_stripe_index] + logical % stripe_len,
+	       read_len);
+	ret = read_len;
+out:
+	free_raid56_rebuild_ctrl(ctrl);
+	return ret;
 }
 
 static struct btrfs_chunk_map *lookup_chunk_map(struct btrfs_fs_info *fs_info,
