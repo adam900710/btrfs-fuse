@@ -33,6 +33,9 @@
 #define BTRFS_NODESIZE_MIN	4096
 #define BTRFS_NODESIZE_MAX	65536
 
+/* Stripe length for stripe based profiles (RAID0/RAID10/RAID56) */
+#define BTRFS_STRIPE_LEN	65536
+
 /*
  * The maximum checksum size in bytes, not all checksum algorithms use all
  * available bytes.
@@ -354,6 +357,8 @@ struct btrfs_node {
 					 BTRFS_BLOCK_GROUP_RAID6 |\
 					 BTRFS_BLOCK_GROUP_RAID1C3 |\
 					 BTRFS_BLOCK_GROUP_RAID1C4)
+#define BTRFS_BLOCK_GROUP_RAID56_MASK	(BTRFS_BLOCK_GROUP_RAID5 |\
+					 BTRFS_BLOCK_GROUP_RAID6)
 
 struct btrfs_stripe {
 	__le64 devid;

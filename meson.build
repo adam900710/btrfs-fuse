@@ -5,7 +5,7 @@ if get_option('buildtype').startswith('debug')
 endif
 src = ['accessors.c', 'hash.c', 'main.c', 'messages.c', 'metadata.c',
        'super.c', 'volumes.c', 'inode.c', 'data.c', 'compression.c',
-       'libs/crc32c.c', 'libs/rbtree.c']
+       'libs/crc32c.c', 'libs/rbtree.c', 'libs/raid56.c', 'libs/tables.c']
 
 cc = meson.get_compiler('c')
 
