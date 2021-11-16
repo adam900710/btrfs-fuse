@@ -74,3 +74,5 @@ executable('fsstress', 'tests/fsstress.c', c_args: test_args,
            dependencies: test_deps, install: false)
 executable('fssum', 'tests/fssum.c', c_args: test_args,
            dependencies: [test_deps, crypto_dep], install: false)
+executable('corrupt', 'tests/corrupt.c', c_args: test_args,
+           dependencies: [test_deps, crypto_dep], install: false)
