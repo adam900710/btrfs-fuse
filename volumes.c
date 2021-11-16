@@ -591,8 +591,9 @@ static int simple_stripe_read(struct btrfs_fs_info *fs_info,
 	const u64 offset = logical - map->logical;
 	const u64 stripe_len = map->stripe_len;
 	const u16 sub_stripes = map->sub_stripes;
-	const u16 num_stripes = map->num_stripes;
-	int group_nr;		/* How many groups needs to be skipped */
+	const u16 data_stripes = map->num_stripes / map->sub_stripes;
+	const u32 full_stripe_len = data_stripes * stripe_len;
+	u16 index;
 	u64 len;
 
 	ret = check_read(map, logical, size, mirror_nr);
@@ -606,26 +607,28 @@ static int simple_stripe_read(struct btrfs_fs_info *fs_info,
 	len = MIN(size, round_down(offset + stripe_len, stripe_len) - offset);
 
 	/*
-	 * Calculate how many groups we need to skip.
+	 * Calculate the stripe index.
 	 *
-	 * For RAID0, sub_stripes is 1, so it's just (offset / stripe_len) %
-	 * num_stripes.
+	 * offset / stripe_len get the total stripe number.
+	 * Then % data_stripes gives which stripe group we should be.
 	 *
-	 * For RAID10, sub_stripes is 2, so it's (offset / stripe_len) %
-	 * (num_stripes / 2) * 2
-	 *
-	 * This is gives the number where the logical bytenr will be located.
-	 * Based on @group_nr, it's now just RAID1.
+	 * For RAID1, at this strage it's what we need already.
+	 * For RAID10, since we still have another copy, we need to multiply by
+	 * sub_stripes, so we can choose the mirror based on mirror_nr.
 	 */
-	group_nr = (offset / stripe_len) % (num_stripes / sub_stripes) * sub_stripes;
-	stripe = &map->stripes[group_nr + mirror_nr - 1];
+	index = (offset / stripe_len) % data_stripes * sub_stripes;
+	index += mirror_nr - 1;
+	stripe = &map->stripes[index];
 
 	/* Now do the real IO */
-	if (stripe->dev->fd >= 0)
-		ret = btrfs_read_from_disk(stripe->dev->fd, buf,
-				stripe->physical + offset % stripe_len, len);
-	else
+	if (stripe->dev->fd >= 0) {
+		u64 physical = offset / full_stripe_len * stripe_len +
+			       offset % map->stripe_len + stripe->physical;
+
+		ret = btrfs_read_from_disk(stripe->dev->fd, buf, physical, len);
+	} else {
 		ret = -EIO;
+	}
 	return ret;
 }
 
