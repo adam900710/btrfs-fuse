@@ -143,6 +143,12 @@ Thus it needs root privilege.
 Then mount using `btrfs-fuse`, and compare the filesystem content against the
 summary.
 
+Also for profiles with duplication, the test case will also try to remove device(s)
+and manually corrupt device(s) and make sure the content is still correct.
+
+As regular dm/dm-raid can handle missing devices, but since they don't have
+checksum, they are not able to handle corrupted devices.
+
 License
 -------
 
