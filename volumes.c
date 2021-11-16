@@ -669,7 +669,7 @@ static int raid56_read(struct btrfs_fs_info *fs_info,
 	stripe = &map->stripes[stripe_index];
 
 	/* Direct read from data stripes */
-	if (mirror_nr <= 1 && stripe->dev->fd) {
+	if (mirror_nr <= 1 && stripe->dev->fd > 0) {
 		physical = stripe->physical +
 			   full_stripe_nr * BTRFS_STRIPE_LEN +
 			   offset % BTRFS_STRIPE_LEN;
