@@ -125,6 +125,23 @@ $ btrfs-fuse /dev/test/scratch1 /dev/test/scratch2 /tmp/mount
 
 Then only btrfs on `/dev/test/scratch2` will be mounted onto `/tmp/mount`.
 
+Selftest
+--------
+
+`btrfs-fuse` has a self-test script in `tests/test.sh`.
+
+Usage:
+
+```
+# ./tests/test.sh <builddir>
+```
+
+The test case will utilize `fsstress` to generate a complex enough fs with
+btrfs kernel module, and then use `fssum` to generate a summary of the whole fs.
+Thus it needs root privilege.
+
+Then mount using `btrfs-fuse`, and compare the filesystem content against the
+summary.
 
 License
 -------
