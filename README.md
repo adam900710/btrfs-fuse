@@ -122,7 +122,7 @@ License
 
 All files at the root directory is under MIT license.
 
-Files under `libs` directory is under their own licenses.
+Files under `libs` and `tests` directories are under their own licenses.
 Mostly GPL-2.0+ or GPL-2.0-only.
 
 Those external libs include:
@@ -155,9 +155,16 @@ Those external libs include:
   Cross-ported from btrfs-progs, which is cross-ported from kernel, and under
   GPL-2.0-only license.
 
+- fsstress.c
+
+  For populating the test mount point.
+
+  Cross-ported from fstests, which is cross-ported from LTP, and under
+  GPL-2.0-only license.
+
 For projects which want to have btrfs read-only support, and already has a
 FUSE-like interface (like GRUB), those files should not be cross-ported to the
-project if above licenses are not compatible with the target project.
+project as above licenses are not compatible with the target project.
 
 Instead either use wrappers around the interfaces provided by the target
 project, or start from scratch and follow the license of the target project.
