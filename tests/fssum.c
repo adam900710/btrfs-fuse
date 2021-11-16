@@ -577,9 +577,16 @@ sum(int dirfd, int level, sum_t *dircs, char *path_prefix, char *path_in)
 			exit(-1);
 		}
 
-		/* We are crossing into a different subvol, skip this subtree. */
+		/*
+		 * We are crossing into a different subvol, but since fuse
+		 * can't pass st_dev to distinguish different subvols, we
+		 * continue, and rely on the test case we didn't create
+		 * snapshot which can lead to path loop.
+		 */
+		/*
 		if (st.st_dev != dir_st.st_dev)
 			goto next;
+			*/
 
 		sum_add_u64(&meta, level);
 		sum_add(&meta, namelist[i], strlen(namelist[i]));
