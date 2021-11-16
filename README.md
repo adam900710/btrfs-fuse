@@ -74,6 +74,15 @@ This project has the following dependency:
   For FUSE interface.
 
 
+There are some extra dependency for self-test tools:
+
+- xfsprogs
+- btrfs-progs
+- aio (optional)
+- liburing (optional)
+
+Above dependencies are all for `fsstress` program.
+
 Limitation
 ----------
 
@@ -161,6 +170,12 @@ Those external libs include:
 
   Cross-ported from fstests, which is cross-ported from LTP, and under
   GPL-2.0-only license.
+
+- fssum.c and md5.[ch]
+
+  For verifying the content of the test filesystem.
+
+  Cross-ported from fstests, under GPL-2.0-only license.
 
 For projects which want to have btrfs read-only support, and already has a
 FUSE-like interface (like GRUB), those files should not be cross-ported to the
