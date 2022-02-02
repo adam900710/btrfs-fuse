@@ -130,7 +130,7 @@ ssize_t btrfs_read_data(struct btrfs_fs_info *fs_info, char *buf,
 	bool has_csum;
 	u32 bytes_to_read;
 	u64 next_range_start;
-	int ret;
+	int ret = 0;
 	int mirror_nr;
 	int max_mirror;
 
