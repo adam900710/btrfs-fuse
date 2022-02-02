@@ -26,6 +26,13 @@ compression_deps = [zlib_dep, lzo_dep, zstd_dep]
 
 fuse_dep = dependency('fuse3')
 
+# For PPC64/MIPS64 which has u64 defined as unsigned long, and can
+# cause warning for print formats.
+# Use this marco to use more common u64 == unsigned long long.
+if host_machine.cpu_family() == 'ppc64' or host_machine.cpu_family() == 'mips64'
+  add_project_arguments('-D__SANE_USERSPACE_TYPES__', language : ['c'])
+endif
+
 btrfs_fuse_deps = [uuid_dep, hash_deps, compression_deps, fuse_dep]
 executable('btrfs-fuse', btrfs_fuse_src, dependencies: btrfs_fuse_deps,
            install: true)
