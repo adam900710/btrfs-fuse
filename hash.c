@@ -30,11 +30,7 @@ static int hash_xxhash(const u8* buf, size_t length, u8 *out)
 
 static int hash_sha256(const u8* buf, size_t length, u8 *out)
 {
-	SHA256_CTX ctx;
-
-	SHA256_Init(&ctx);
-	SHA256_Update(&ctx, buf, length);
-	SHA256_Final(out, &ctx);
+	SHA256(buf, length, out);
 
 	return 0;
 }
