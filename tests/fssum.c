@@ -29,7 +29,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <endian.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 
 #define CS_SIZE 16
 #define CHUNKS	128
@@ -49,7 +49,7 @@ struct excludes {
 };
 
 typedef struct _sum {
-	MD5_CTX 	md5;
+	EVP_MD_CTX	*ctx;
 	unsigned char	out[16];
 } sum_t;
 
@@ -176,19 +176,26 @@ alloc(size_t sz)
 void
 sum_init(sum_t *cs)
 {
-	MD5_Init(&cs->md5);
+	cs->ctx = EVP_MD_CTX_new();
+	if (!cs->ctx) {
+		fprintf(stderr, "evp md allocation failed\n");
+		exit(-1);
+	}
+	EVP_DigestInit(cs->ctx, EVP_md5());
 }
 
 void
 sum_fini(sum_t *cs)
 {
-	MD5_Final(cs->out, &cs->md5);
+	EVP_DigestFinal(cs->ctx, cs->out, NULL);
+	EVP_MD_CTX_free(cs->ctx);
+	cs->ctx = NULL;
 }
 
 void
 sum_add(sum_t *cs, void *buf, int size)
 {
-	MD5_Update(&cs->md5, buf, size);
+	EVP_DigestUpdate(cs->ctx, buf, size);
 }
 
 void
