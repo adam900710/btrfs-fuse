@@ -41,17 +41,17 @@ executable('btrfs-fuse', btrfs_fuse_src, dependencies: btrfs_fuse_deps,
 #
 # Btrfs-progs is a hard-requirement so that fsstress can create subvolumes and
 # snapshots. Without that we can't test the name resolve for subvolumes.
-btrfs_dep = dependency('libbtrfsutil')
+btrfs_dep = dependency('libbtrfsutil', required: false)
 test_args = ['-D_GNU_SOURCE', '-D_FILE_OFFSET_BITS=64']
 if btrfs_dep.found()
   test_args += ['-DHAVE_BTRFSUTIL_H']
 endif
 
-if cc.has_header('linux/fiemap.h')
+if cc.has_header('linux/fiemap.h', required: false)
   test_args += ['-DHAVE_LINUX_FIEMAP_H']
 endif
 
-if cc.has_header('sys/prctl.h')
+if cc.has_header('sys/prctl.h', required: false)
   test_args += ['-DHAVE_SYS_PRCTL_H']
 endif
 
@@ -69,14 +69,14 @@ if cc.has_function('renameat2')
   test_args += ['-DHAVE_RENAMEAT2']
 endif
 
-if cc.has_header('xfs/xfs.h')
+if cc.has_header('xfs/xfs.h', required: false)
   test_args += ['-DHAVE_XFS_XFS_H']
 endif
-if cc.has_header('xfs/jdm.h')
+if cc.has_header('xfs/jdm.h', required: false)
   test_args += ['-DHAVE_XFS_JDM_H']
 endif
 
-test_deps = [btrfs_dep, aio_dep, uring_dep ]
+test_deps = [btrfs_dep, aio_dep, uring_dep]
 executable('fsstress', 'tests/fsstress.c', c_args: test_args,
            dependencies: test_deps, install: false)
 executable('fssum', 'tests/fssum.c', c_args: test_args,
