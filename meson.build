@@ -61,7 +61,7 @@ if aio_dep.found()
 endif
 
 uring_dep = dependency('liburing', required: false)
-if aio_dep.found()
+if uring_dep.found()
   test_args += ['-DURING']
 endif
 
