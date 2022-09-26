@@ -37,31 +37,33 @@ btrfs_fuse_deps = [uuid_dep, hash_deps, compression_deps, fuse_dep]
 executable('btrfs-fuse', btrfs_fuse_src, dependencies: btrfs_fuse_deps,
            install: true)
 
+want_tests =  get_option('tests')
+
 # The rest are all for selftests
 #
 # Btrfs-progs is a hard-requirement so that fsstress can create subvolumes and
 # snapshots. Without that we can't test the name resolve for subvolumes.
-btrfs_dep = dependency('libbtrfsutil')
+btrfs_dep = dependency('libbtrfsutil', required: want_tests)
 test_args = ['-D_GNU_SOURCE', '-D_FILE_OFFSET_BITS=64']
 if btrfs_dep.found()
   test_args += ['-DHAVE_BTRFSUTIL_H']
 endif
 
-if cc.has_header('linux/fiemap.h')
+if cc.has_header('linux/fiemap.h', required: want_tests)
   test_args += ['-DHAVE_LINUX_FIEMAP_H']
 endif
 
-if cc.has_header('sys/prctl.h')
+if cc.has_header('sys/prctl.h', required: want_tests)
   test_args += ['-DHAVE_SYS_PRCTL_H']
 endif
 
-aio_dep = cc.find_library('aio', has_headers: ['libaio.h'], required: false)
+aio_dep = cc.find_library('aio', has_headers: ['libaio.h'], required: want_tests)
 if aio_dep.found()
   test_args += ['-DAIO']
 endif
 
-uring_dep = dependency('liburing', required: false)
-if aio_dep.found()
+uring_dep = dependency('liburing', required: want_tests)
+if uring_dep.found()
   test_args += ['-DURING']
 endif
 
@@ -69,14 +71,14 @@ if cc.has_function('renameat2')
   test_args += ['-DHAVE_RENAMEAT2']
 endif
 
-if cc.has_header('xfs/xfs.h')
+if cc.has_header('xfs/xfs.h', required: want_tests)
   test_args += ['-DHAVE_XFS_XFS_H']
 endif
-if cc.has_header('xfs/jdm.h')
+if cc.has_header('xfs/jdm.h', required: want_tests)
   test_args += ['-DHAVE_XFS_JDM_H']
 endif
 
-test_deps = [btrfs_dep, aio_dep, uring_dep ]
+test_deps = [btrfs_dep, aio_dep, uring_dep]
 executable('fsstress', 'tests/fsstress.c', c_args: test_args,
            dependencies: test_deps, install: false)
 executable('fssum', 'tests/fssum.c', c_args: test_args,
