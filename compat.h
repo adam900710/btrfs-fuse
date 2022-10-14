@@ -48,11 +48,15 @@ typedef __s32 s32;
 /* Compiler check related macros */
 #ifdef __CHECKER__
 #define __force		__attribute__((force))
+#ifndef __bitwise__
 #define __bitwise__	__attribute__((bitwise))
+#endif	/* __bitwise__ */
 #define __must_check	__attribute__((__warn_unused_result__))
 #else
 #define __force
+#ifndef __bitwise__
 #define __bitwise__
+#endif	/* __bitwise__ */
 #define __must_check
 #endif /* __CHECKER__ */
 
