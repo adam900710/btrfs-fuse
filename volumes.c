@@ -139,8 +139,8 @@ error:
 	return NULL;
 }
 
-static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
-					      const u8 *dev_uuid, u64 devid)
+static int global_add_device(const char* path, const u8 *fsid,
+			     const u8 *dev_uuid, u64 devid)
 {
 	struct btrfs_fs_devices *fs_devs;
 	struct btrfs_fs_devices *found_fs_devs = NULL;
@@ -157,7 +157,7 @@ static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 	if (!found_fs_devs) {
 		found_fs_devs = malloc(sizeof(*found_fs_devs));
 		if (!found_fs_devs)
-			return ERR_PTR(-ENOMEM);
+			return -ENOMEM;
 		INIT_LIST_HEAD(&found_fs_devs->dev_list);
 		found_fs_devs->num_devices = 0;
 		memcpy(found_fs_devs->fsid, fsid, BTRFS_UUID_SIZE);
@@ -170,7 +170,7 @@ static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 		    memcmp(dev_uuid, dev->uuid, BTRFS_UUID_SIZE)) {
 			error("conflicting device found for devid %llu",
 				devid);
-			return ERR_PTR(-EEXIST);
+			return -EEXIST;
 		}
 		if (dev->devid == devid &&
 		    !memcmp(dev_uuid, dev->uuid, BTRFS_UUID_SIZE)) {
@@ -189,7 +189,7 @@ static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 				list_del(&found_fs_devs->fs_list);
 				free(found_fs_devs);
 			}
-			return ERR_PTR(-ENOMEM);
+			return -ENOMEM;
 		}
 		if (path)
 			found_dev->path = strndup(path, PATH_MAX);
@@ -199,7 +199,7 @@ static struct btrfs_device *global_add_device(const char* path, const u8 *fsid,
 				free(found_fs_devs);
 			}
 			free(found_dev);
-			return ERR_PTR(-ENOMEM);
+			return -ENOMEM;
 		}
 
 		found_dev->devid = devid;
@@ -241,7 +241,8 @@ int btrfs_scan_device(const char *path, struct btrfs_super_block *sb)
 		goto out;
 	devid = btrfs_stack_device_id(&buf.dev_item);
 
-	if (IS_ERR(global_add_device(path, buf.fsid, buf.dev_item.uuid, devid)))
+	ret = global_add_device(path, buf.fsid, buf.dev_item.uuid, devid);
+	if (ret < 0)
 		goto out;
 	if (sb)
 		memcpy(sb, &buf, BTRFS_SUPER_INFO_SIZE);
@@ -375,10 +376,12 @@ static int add_chunk_map(struct btrfs_fs_info *fs_info, u64 logical,
 		dev = btrfs_find_device(fs_info, devid,
 					stack_chunk->stripes[i].dev_uuid);
 		if (!dev) {
+			int ret;
+
 			warning("devid %llu is missing", devid);
-			dev = global_add_device(NULL, fs_info->fsid,
+			ret = global_add_device(NULL, fs_info->fsid,
 					stack_chunk->stripes[i].dev_uuid, devid);
-			if (IS_ERR(dev)) {
+			if (ret < 0) {
 				free(map);
 				return PTR_ERR(dev);
 			}
@@ -461,10 +464,12 @@ static int read_one_dev(struct btrfs_fs_info *fs_info, struct btrfs_path *path)
 			(unsigned long)btrfs_device_fsid(di), BTRFS_UUID_SIZE);
 	device = btrfs_find_device(fs_info, devid, dev_uuid);
 	if (!device) {
+		int ret;
+
 		warning("devid %llu is missing", devid);
-		device = global_add_device(NULL, fsid, dev_uuid, devid);
-		if (IS_ERR(device))
-			return PTR_ERR(device);
+		ret = global_add_device(NULL, fsid, dev_uuid, devid);
+		if (ret)
+			return ret;
 	}
 	return 0;
 }
