@@ -225,14 +225,22 @@ int btrfs_scan_device(const char *path, struct btrfs_super_block *sb)
 	int fd;
 
 	fd = open(path, O_RDONLY);
-	if (fd < 0)
+	if (fd < 0) {
+		error("failed to open '%s': %m", path);
 		return -errno;
+	}
 
 	ret = btrfs_read_from_disk(fd, (char *)&buf, BTRFS_SUPER_INFO_OFFSET,
 				   BTRFS_SUPER_INFO_SIZE);
 	if (ret < BTRFS_SUPER_INFO_SIZE) {
-		if (ret > 0)
+		if (ret >= 0) {
+			error("failed to read super block: short read, expect %d got %d bytes",
+			      BTRFS_SUPER_INFO_SIZE, ret);
 			ret = -EIO;
+		} else {
+			errno = -ret;
+			error("failed to read super block: %m");
+		}
 		goto out;
 	}
 
@@ -242,8 +250,11 @@ int btrfs_scan_device(const char *path, struct btrfs_super_block *sb)
 	devid = btrfs_stack_device_id(&buf.dev_item);
 
 	ret = global_add_device(path, buf.fsid, buf.dev_item.uuid, devid);
-	if (ret < 0)
+	if (ret < 0) {
+		errno = -ret;
+		error("failed to add device '%s': %m", path);
 		goto out;
+	}
 	if (sb)
 		memcpy(sb, &buf, BTRFS_SUPER_INFO_SIZE);
 out:
