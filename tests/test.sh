@@ -148,15 +148,15 @@ test_raid10()
 	"$fssum" -r "$tmp.fssum_kernel" "$mnt" >> "$log" || fail "fssum verification failed"
 	fusermount -u "$mnt" || fail "fuse unmount failed"
 
-	# The missing/corrupted devices can not be in the same group
-	echo "=== test raid10 with two missing devs ===" | tee -a "$log"
-	"$fuse" "${devs[0]}" "${devs[2]}" "$mnt" >> "$log" || fail "fuse mount failed"
+	# In theory we can handle two missing devices in different sub groups,
+	# but that requires very strict device rotation during mkfs.
+	echo "=== test raid10 with one missing devs ===" | tee -a "$log"
+	"$fuse" "${devs[0]}" "${devs[1]}" "${devs[3]}" "$mnt" >> "$log" || fail "fuse mount failed"
 	"$fssum" -r "$tmp.fssum_kernel" "$mnt" >> "$log" || fail "fssum verification failed"
 	fusermount -u "$mnt" || fail "fuse unmount failed"
 
-	echo "=== test raid10 with two corrupted dev ===" | tee -a "$log"
+	echo "=== test raid10 with one corrupted dev ===" | tee -a "$log"
 	"$corrupt" "${devs[0]}" >> "$log" || fail "file corruption failed"
-	"$corrupt" "${devs[2]}" >> "$log" || fail "file corruption failed"
 	"$fuse" "${devs[0]}" "${devs[1]}" "${devs[2]}" "${devs[3]}" "$mnt" ||\
 		fail "fuse mount failed"
 	"$fssum" -r "$tmp.fssum_kernel" "$mnt" >> "$log" || fail "fssum verification failed"
