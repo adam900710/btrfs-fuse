@@ -154,24 +154,29 @@ static int btrfs_fuse_readdir(const char *path, void *buf,
 	if (dir.file_type != BTRFS_FT_DIR)
 		return -ENOTDIR;
 
-	ret = btrfs_iterate_dir_start(fs_info, &ctrl, &dir, offset);
+	/*
+	 * The @offset is the last returned found index. So we should start
+	 * from the next one.
+	 */
+	ret = btrfs_iterate_dir_start(fs_info, &ctrl, &dir, offset + 1);
 	if (ret < 0)
 		return ret;
 
 	while (ret == 0) {
+		u64 found_index;
 		char name_buf[BTRFS_NAME_LEN + 1] = {};
 		size_t name_len;
 		struct btrfs_inode entry = {};
 		struct stat st = {};
 
-		ret = btrfs_iterate_dir_get_inode(fs_info, &ctrl, &entry, NULL,
-						  name_buf, &name_len);
+		ret = btrfs_iterate_dir_get_inode(fs_info, &ctrl, &entry,
+				&found_index, name_buf, &name_len);
 		if (ret < 0)
 			break;
 
 		st.st_ino = entry.ino;
 		st.st_mode = btrfs_type_to_imode(entry.file_type);
-		if (filler(buf, name_buf, &st, 0, 0))
+		if (filler(buf, name_buf, &st, found_index, 0))
 			break;
 		ret = btrfs_iterate_dir_next(fs_info, &ctrl);
 	}
