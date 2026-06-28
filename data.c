@@ -363,7 +363,7 @@ static ssize_t read_compressed_file_extent(struct btrfs_fs_info *fs_info,
 	u64 disk_bytenr;
 	u64 fi_offset;
 	u64 fi_num_bytes;
-	u32 cur_off = 0;
+	u64 cur_off = 0;
 	u8 compress;
 	u8 type;
 	int ret;
@@ -435,7 +435,7 @@ static ssize_t read_file_extent(struct btrfs_fs_info *fs_info,
 	u64 disk_bytenr;
 	u64 nr_bytes;
 	u32 read_bytes;
-	u32 cur_off = 0;
+	u64 cur_off = 0;
 	u8 type;
 	int ret;
 
@@ -501,7 +501,7 @@ ssize_t btrfs_read_file(struct btrfs_fs_info *fs_info,
 			char *buf, u32 num_bytes)
 {
 	struct btrfs_path path;
-	u32 cur_off = 0;
+	u64 cur_off = 0;
 	int ret;
 
 	ASSERT(IS_ALIGNED(file_offset, fs_info->sectorsize) &&
