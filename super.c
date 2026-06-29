@@ -60,6 +60,14 @@ int btrfs_check_super(struct btrfs_super_block *sb)
 		goto error_out;
 	}
 
+#ifndef HAVE_LZO
+	if (btrfs_super_incompat_flags(sb) &
+	    (1ULL << BTRFS_COMPRESS_LZO)) {
+		error("filesystem needs lzo compression but lzo support is not built in");
+		goto error_out;
+	}
+#endif
+
 	/* Root level checks */
 	if (btrfs_super_root_level(sb) >= BTRFS_MAX_LEVEL) {
 		error("tree_root level too big: %d >= %d",

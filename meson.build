@@ -20,9 +20,13 @@ hash_deps = [blake2_dep, crypto_dep, xxhash_dep]
 # Compression dependency
 zlib_dep = dependency('zlib')
 # not using pkgconfig for lzo as older versions do not ship a definition
-lzo_dep = cc.find_library('lzo2', has_headers: ['lzo/lzo2a.h'])
+lzo_dep = cc.find_library('lzo2', has_headers: ['lzo/lzo2a.h'], required: false)
 zstd_dep = dependency('libzstd')
-compression_deps = [zlib_dep, lzo_dep, zstd_dep]
+compression_deps = [zlib_dep, zstd_dep]
+if lzo_dep.found()
+  compression_deps += [lzo_dep]
+  add_project_arguments('-DHAVE_LZO', language : ['c'])
+endif
 
 fuse_dep = dependency('fuse3')
 
